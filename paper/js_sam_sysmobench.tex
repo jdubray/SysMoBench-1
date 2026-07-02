@@ -1,0 +1,1105 @@
+\documentclass[11pt]{article}
+
+\usepackage[margin=1.1in]{geometry}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage{microtype}
+\usepackage{booktabs}
+\usepackage{amsmath}
+\usepackage{graphicx}
+\usepackage{xcolor}
+\usepackage{listings}
+\usepackage{multirow}
+\usepackage[hidelinks]{hyperref}
+\usepackage{caption}
+\captionsetup{font=small,labelfont=bf}
+
+\lstdefinestyle{code}{
+  basicstyle=\ttfamily\small,
+  breaklines=true,
+  frame=single,
+  framerule=0.3pt,
+  xleftmargin=1em,
+  aboveskip=0.8em,
+  belowskip=0.8em,
+  columns=fullflexible,
+  keepspaces=true
+}
+
+\newcommand{\jssam}{JS-SAM}
+\newcommand{\tlaplus}{TLA\texorpdfstring{\textsuperscript{+}}{+}}
+
+\title{\textbf{Executable JavaScript as a Specification Language:\\
+A \jssam{} Case Study on SysMoBench}}
+
+\author{
+  Jean-Jacques Dubray\\
+  \texttt{jdubray@gmail.com}\\[0.5em]
+  \small\textit{In collaboration with the SysMoBench / Specula team}
+}
+\date{July 2, 2026 \quad (draft)}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+SysMoBench evaluates whether large language models (LLMs) can formally model
+real-world concurrent and distributed systems, grading generated \tlaplus{}
+specifications through four automated phases: syntax, bounded model checking,
+conformance against execution traces captured from the real system, and
+invariant verification. We extend SysMoBench with its first
+\emph{non-formal-language} backend, \jssam{}: specifications written in
+JavaScript following the SAM pattern, whose semantics --- actions propose,
+a model accepts, state is a pure function of the model --- are deliberately
+aligned with \tlaplus{}. The backend tests a specific hypothesis: LLMs may
+model systems more accurately in a language ubiquitous in their training data
+than in formal languages they rarely see.
+
+Using the Asterinas OS spinlock task, we instrument the real kernel, run it
+under QEMU, and capture a 28-window transition corpus; we then evaluate four
+Claude models (Haiku~4.5, Sonnet~4.6, Opus~4.8, Fable~5) end to end. Four
+findings emerge. First, trace conformance is the only phase with discriminating
+power: all four models pass syntax, model checking, and invariant verification,
+while conformance spreads them from 21.4\% to 89.3\% --- including a frontier
+model that silently no-ops an entire action (every \texttt{ReleaseLock}) yet
+passes every internal-consistency phase. Second, a single round of
+repair-from-trace-feedback separates the models into three clean tiers (full,
+partial, and no self-correction), and shows that one-shot accuracy and
+repair ability are different axes: the model with the categorical release
+defect repairs to 100\%, while a mid-tier model given identical feedback cannot.
+Third, on the same task and models, 4/4 \jssam{} specifications are
+end-to-end checkable versus 1/4 for \tlaplus{}, attributable to a concrete
+\tlaplus{} semantic pitfall (unbounded \texttt{CHOOSE}) that JavaScript's
+native \texttt{null} sidesteps, and to \jssam{}'s self-contained executable
+artifact eliminating the model-checker configuration surface. Finally, a
+pre-registered, paired, four-arm study ($N{=}5$ generations per cell) puts
+the conformance question itself under control. Most of an apparent \tlaplus{}
+conformance advantage was \emph{prompt prescriptiveness}, not language:
+adding the identical semantics block to the JavaScript prompt closed most of
+the gap. A one-directional residual survives that control --- \tlaplus{}
+reaches 100\% conformance for every model and every generation, constrained
+\jssam{} does so for one model of four --- but a plain-JavaScript control arm
+locates its cause: a bare \texttt{next(state, action, data)} transition
+function, structurally isomorphic to the \tlaplus{} relation, ties \tlaplus{}
+at 100\% for every model and every generation. The residual is therefore
+attributable neither to JavaScript nor to formality but to the SAM
+specification contract's defect surface (proposal/acceptor wiring plus
+mandatory auxiliary state); what models transcribe reliably is
+\emph{minimal declarative shape}, in any language. The hypothesis splits:
+familiarity and a self-contained artifact buy checkability; transcription
+fidelity is governed by the shape of the specification contract --- a
+directly actionable design result for \jssam{}. We report these results
+candidly as a single-task case study, describe the kernel trace-capture and
+controlled-comparison methodology in full, and outline the path to a
+multi-task comparison.
+\end{abstract}
+
+\section{Introduction}
+\label{sec:intro}
+
+Formal specifications are among the most effective tools for establishing the
+correctness of concurrent and distributed systems~\cite{newcombe2015amazon},
+and among the least used: writing them demands rare expertise and sustained
+effort. LLMs raise an obvious question --- can they write specifications for
+us? --- and a harder one: \emph{how would we know if they got it right?}
+A generated specification can be syntactically flawless, explore cleanly under
+a model checker, satisfy plausible invariants, and still describe a system
+that does not exist. The SysMoBench benchmark~\cite{sysmobench} confronts this
+directly. Its authors observed that when asked to model Etcd's Raft
+implementation, a frontier LLM produced, in effect, the specification from the
+appendix of the Raft paper --- a ``textbook'' model with little connection to
+the implementation at hand~\cite{sigops2026}. SysMoBench therefore grades
+specifications in four phases of increasing demand: (1)~syntax, (2)~runtime
+model checking, (3)~\emph{transition validation} --- replaying
+$(\mathit{pre}, \mathit{action}, \mathit{post})$ windows captured from real
+executions against the generated model --- and (4)~invariant verification.
+
+SysMoBench was built for \tlaplus{}~\cite{lamport2002specifying}, and has since
+grown a pluggable backend interface with Alloy~\cite{jackson2002alloy} and
+PAT/CSP\#~\cite{sun2009pat} backends. All three are formal languages, and all
+three are rare in LLM training corpora relative to mainstream programming
+languages. This asymmetry motivates the extension we present here.
+
+\paragraph{The \jssam{} hypothesis.}
+SAM~\cite{sam,dubray2016infoq} is a software-engineering pattern whose
+semantics are explicitly derived from \tlaplus{}: \emph{actions} compute
+proposals from inputs, a \emph{model} accepts or rejects proposals as the sole
+locus of mutation, and \emph{state} is a pure function of the model. A SAM
+specification is an ordinary executable JavaScript module. JavaScript is
+plausibly the single most abundant programming language in LLM training data.
+The hypothesis, then:
+
+\begin{quote}
+\emph{Can an LLM produce a correct specification of a real system more readily
+in a pattern hosted by a language it has seen constantly in training
+(JavaScript), than in formal languages it has rarely seen --- while preserving
+the \tlaplus{}-style discipline that makes the artifact checkable?}
+\end{quote}
+
+Either answer is informative. If \jssam{} scores diverge upward, host-language
+familiarity dominates and formal syntax is a bottleneck; if scores match or
+fall, the hard part is modeling, not notation.
+
+\paragraph{Contributions.}
+This paper reports the first end-to-end results from the \jssam{} backend,
+all on the SysMoBench \texttt{spin} task (the Asterinas OS
+spinlock~\cite{asterinas}):
+
+\begin{enumerate}
+\item \textbf{A non-formal-language backend for SysMoBench}
+  (\S\ref{sec:backend}): the \jssam{} module contract, a sandboxed execution
+  helper, and --- a first for the benchmark --- a \emph{direct} Phase-3
+  replay path requiring no coding-agent orchestration, because SAM's step
+  relation \emph{is} $\mathit{model.present}(\mathit{action}(\mathit{data}))$.
+\item \textbf{A reproducible kernel trace-capture methodology}
+  (\S\ref{sec:traces}): instrumenting the real Asterinas spinlock, driving a
+  two-thread contention scenario in a single-CPU kernel test without deadlock,
+  and folding low-level kernel events into model-independent
+  $(\mathit{pre}, \mathit{action}, \mathit{post})$ windows --- producing the
+  28-window corpus used throughout.
+\item \textbf{A four-model comparison} (\S\ref{sec:models}) showing that
+  Phases 1, 2, and 4 have no discriminating power on this task while Phase 3
+  spreads the models from 21.4\% to 89.3\% --- and that general model
+  capability does not predict modeling accuracy: the most capable model tested
+  produced a specification that no-ops every lock release.
+\item \textbf{A repair-loop experiment} (\S\ref{sec:repair}) demonstrating
+  that self-correction from precise trace feedback is a sharper capability
+  gradient than one-shot accuracy, separating the four models into three tiers.
+\item \textbf{A \jssam{}-vs-\tlaplus{} head-to-head} (\S\ref{sec:vstla}):
+  with identical models and task, 4/4 \jssam{} specifications reach
+  end-to-end evaluability versus 1/4 for \tlaplus{}, with each \tlaplus{}
+  failure attributed to a specific structural cause.
+\item \textbf{A controlled cross-language conformance study}
+  (\S\ref{sec:crosslang}): a pre-registered, paired, four-arm design
+  ($N{=}5$ generations per cell) that pins both languages to the same
+  observable-state contract and replays the same trace corpus mechanically in
+  both. After catching and controlling a prompt-prescriptiveness confound
+  that would otherwise have produced a false headline, a plain-JavaScript
+  control arm attributes the residual conformance gap to the SAM contract's
+  machinery --- not to the JavaScript language, and not to formality ---
+  yielding a concrete design change for the backend.
+\end{enumerate}
+
+We emphasize scope honestly: everything here concerns one task and a
+28-window trace corpus, with single-generation results in Experiments 1--3
+and $N{=}5$ replication only in Experiment 4. We present it as a case study whose
+value lies in the precision of the failure attribution and the reproducibility
+of the pipeline, not as a settled verdict on the hypothesis
+(\S\ref{sec:limitations}).
+
+\section{Background}
+\label{sec:background}
+
+\subsection{SysMoBench}
+
+SysMoBench~\cite{sysmobench} pairs eleven real systems (concurrent
+synchronization primitives and distributed protocols, from the Asterinas
+spinlock to Etcd Raft) with instrumentation harnesses and expert-written
+invariants. Given the system's source, an LLM generates a specification, which
+is scored in four automated phases:
+
+\begin{description}
+\item[Phase 1 --- Syntax.] Does the specification parse and structurally
+  validate? (For \tlaplus{}: the SANY analyzer.)
+\item[Phase 2 --- Runtime model checking.] Does bounded state-space
+  exploration terminate without errors, deadlocks, or nondeterminism? (For
+  \tlaplus{}: TLC~\cite{yu1999tlc}.)
+\item[Phase 3 --- Transition validation (conformance).] Execution traces from
+  the \emph{real} system are cut into windows
+  $(\mathit{pre}, \mathit{action}, \mathit{post})$; each window passes if the
+  generated model, started at $\mathit{pre}$ and applying $\mathit{action}$,
+  produces $\mathit{post}$. The output is a per-action scorecard.
+\item[Phase 4 --- Invariant verification.] Expert invariants (e.g., mutual
+  exclusion) are translated into the specification's language and checked.
+\end{description}
+
+The benchmark's central published finding is that frontier LLMs cluster near
+100\% on syntax but average roughly 46\% on conformance and 41\% on
+invariants~\cite{sigops2026}: models write valid \tlaplus{} fluently yet
+describe the textbook protocol rather than the implementation. Phase 3 exists
+precisely to distinguish ``writing \tlaplus{}'' from ``modeling this system.''
+
+\subsection{The SAM pattern}
+
+SAM (State--Action--Model)~\cite{sam,dubray2016infoq} factors a program's
+temporal behavior the way \tlaplus{} factors a specification. An
+\emph{action} is a pure function from inputs to a \emph{proposal}; the
+\emph{model} alone decides whether to accept a proposal and mutate itself
+(the analogue of a \tlaplus{} next-state relation, with acceptors playing the
+role of guards); \emph{state} is a pure function of the model. A step of the
+system is $\mathit{model.present}(\mathit{action}(\mathit{data}))$. The
+pattern is implemented by the \texttt{sam-pattern}
+library~\cite{sampattern}, which also provides a bounded explorer
+(\texttt{checker}) over the model's reachable states.
+
+Two properties make SAM suitable as a specification substrate. First, the
+semantic alignment with \tlaplus{} means the benchmark's phases map onto it
+without distortion: bounded exploration is Phase 2, replaying a trace window
+is literally one SAM step, and invariants are predicates over
+$\mathit{getState}()$. Second, the artifact is an executable JavaScript
+module: there is no separate tool chain between the specification and its
+own evaluation.
+
+\section{The \jssam{} backend}
+\label{sec:backend}
+
+SysMoBench backends implement a \texttt{LanguageBackend} interface and
+register themselves; the CLI and the four evaluators resolve them by name with
+no further plumbing. The \jssam{} backend consists of a Python adapter and a
+small Node.js helper (\texttt{tools/js-sam/cli.mjs}) with four subcommands ---
+\texttt{validate}, \texttt{check}, \texttt{transitions},
+\texttt{invariants} --- one per phase.
+
+\paragraph{Module contract.}
+The generation prompt instructs the model to emit a single CommonJS module:
+
+\begin{lstlisting}[style=code]
+module.exports = {
+  instance,       // SAM instance (synchronous steps)
+  init,           // () => void : reset to the initial state
+  actions,        // { AcquireLock: (data)=>void, ReleaseLock: (data)=>void }
+  getState,       // () => plain JSON-serializable snapshot
+  setState,       // (snapshot) => void : force a state (Phase 3 replay)
+  checkerIntents, // action descriptors + input domains (Phases 2 & 4)
+};
+\end{lstlisting}
+
+\noindent
+\texttt{actions} must cover exactly the task's target actions;
+\texttt{getState} must return a plain object (this is what trace states are
+diffed against); \texttt{setState} exists solely so Phase 3 can replay a
+window without searching for a path to its pre-state; and the module must be
+deterministic and I/O-free. \texttt{checkerIntents} declares each action's
+finite input domain --- for \texttt{spin}, every
+$\{\mathit{thread}, \mathit{callType}\}$ combination --- playing the role of a
+\tlaplus{} constants block. Notably, there is \emph{no separate configuration
+artifact}: the module is self-contained, a fact that becomes material in
+\S\ref{sec:vstla}.
+
+\paragraph{Sandboxing.}
+Model-generated JavaScript is untrusted. Every helper invocation runs in a
+throwaway \texttt{node:20-slim} Docker container with no network,
+a read-only root filesystem, a non-root user, and CPU/memory/PID caps. The
+container is the trust boundary.
+
+\paragraph{The direct Phase-3 path.}
+For \tlaplus{}, SysMoBench's transition validation drives TLC through a
+coding-agent workflow that constructs a checking module per window. \jssam{}
+needs none of that: the evaluator loads the module, and for each window
+executes \texttt{setState(pre)}; \texttt{actions[name](data)}; and diffs
+\texttt{getState()} against \emph{post} under the benchmark's projection rule
+(only keys present in the trace's post-state must match, so model-internal
+bookkeeping is ignored). This ``direct path'' is the first non-agent Phase-3
+implementation in the benchmark, and it follows from SAM's semantics: a
+window \emph{is} a SAM step.
+
+\paragraph{Cross-platform engineering.}
+Making the pipeline run on a Windows host (in addition to Linux/macOS)
+required fixing several host assumptions in the harness --- POSIX-only
+\texttt{os.getuid()} calls, host-path container mounts invalid for
+\texttt{C:\textbackslash} paths, and console encoding --- plus threading the
+helper's \texttt{stepsExplored} metric through a field previously hardcoded to
+zero for non-\tlaplus{} backends. We also generalized the benchmark's
+agent-based invariant translator (previously \tlaplus{}-only) into a shared,
+language-neutral component that \jssam{} can use, although all experiments
+below use the direct translator for parity across languages. These changes
+are upstreamed as pull requests.
+
+\section{Capturing ground truth: kernel traces for Phase 3}
+\label{sec:traces}
+
+Phase 3 is the only phase requiring data external to the model, and SysMoBench
+does not ship trace corpora: traces are generated on demand by instrumenting
+the real system. Additionally, the maintainers' own \texttt{spin} captures use
+three threads while the \jssam{} prompt models two, so the backend required
+its own corpus at the granularity it models. This section documents the
+pipeline; it is the experimental setup's main methodological contribution and
+is fully reproducible from a single script.
+
+\subsection{Pipeline}
+
+\begin{enumerate}
+\item \textbf{Pin a compatible revision.} The reference instrumentation patch
+  applies cleanly at Asterinas v0.16.0 (matching the toolchain in the
+  \texttt{asterinas/asterinas:0.16.0} image), not at \texttt{main}.
+\item \textbf{Instrument.} Apply the benchmark's reference patch, which adds
+  a trace module to the kernel's spinlock emitting one serial JSON event per
+  lock operation, plus a new two-thread kernel test (below).
+\item \textbf{Build and run.} Inside the container: build the initramfs and
+  run the instrumented kernel test under QEMU (software emulation), collecting
+  the event stream from the serial port.
+\item \textbf{Parse.} Fold the event stream into
+  $(\mathit{pre}, \mathit{action}, \mathit{post})$ NDJSON windows.
+\end{enumerate}
+
+\subsection{A two-thread contention scenario without deadlock}
+
+The reference spinlock kernel tests are single-actor: every operation is
+attributed to one thread, so contention --- the behavior that makes a lock
+interesting --- never appears in the trace. But a blocking \texttt{lock()}
+from a second actor in a single-CPU kernel test would spin forever. The
+scenario therefore expresses the second actor's contention through
+non-blocking \texttt{try\_lock} calls that fail without blocking:
+
+\begin{lstlisting}[style=code]
+actor0.lock()      -> TryAcquireBlocking(0), AcquireSuccess(0)  // 0 holds
+actor1.try_lock()  -> AcquireFail(1)          // contention, no deadlock
+actor0.release()   -> Release(0)
+actor1.lock()      -> TryAcquireBlocking(1), AcquireSuccess(1)  // 1 holds
+actor0.try_lock()  -> AcquireFail(0)          // contention
+actor1.release()   -> Release(1)
+actor0.try_lock()  -> AcquireSuccess(0)       // try from free succeeds
+actor0.release()   -> Release(0)
+\end{lstlisting}
+
+A second, longer scenario --- more alternation of the holder, more failed and
+successful \texttt{try\_lock} attempts, and same-thread reacquisition ---
+extends the corpus from 8 windows to \textbf{28 windows} (17
+\texttt{AcquireLock}, 11 \texttt{ReleaseLock}), the corpus used in all
+experiments below.
+
+\subsection{Model-independent state windows}
+
+The kernel emits low-level events (\texttt{TryAcquireBlocking},
+\texttt{AcquireSuccess}, \texttt{AcquireFail}, \texttt{Release}). The parser
+folds these into windows keyed on the \emph{objective} spinlock state ---
+$\{\mathit{lockHeld}, \mathit{lockHolder}\}$, the real observable ownership
+--- and relies on the projection rule to ignore any model's internal
+bookkeeping (thread status, call type). A failed acquire under contention
+produces a window whose post-state ownership is unchanged; a successful
+acquire records the new holder together with whether it arrived via the
+blocking (\texttt{lock}) or non-blocking (\texttt{try}) path. Keying the
+corpus on observable state keeps the ground-truth oracle independent of any
+model under test.
+
+\section{Experiment 1: four models, four phases}
+\label{sec:models}
+
+\subsection{Setup}
+
+Four Claude models spanning the capability range --- Haiku~4.5, Sonnet~4.6,
+Opus~4.8, and Fable~5 (Anthropic's most capable model at the time of
+writing) --- each generated one \jssam{} specification for \texttt{spin} via
+a single prompt (\texttt{direct\_call}), and the same artifact was scored in
+all four phases. Phase 2 and 4 exploration ran at the task's default depth
+bound of 6; Phase 3 used the 28-window corpus; Phase 4 checked three expert
+invariants (MutualExclusion, LockStatusConsistency, NoDeadlock) translated
+via the direct API path.
+
+\subsection{Results}
+
+\begin{table}[ht]
+\centering
+\caption{Four-phase \jssam{} results on \texttt{spin} (28-window corpus).
+P3 per-action columns give windows passed / windows of that action.}
+\label{tab:models}
+\small
+\begin{tabular}{lccrccc}
+\toprule
+Model & P1 & P2 (states) & \multicolumn{1}{c}{P3 overall} & P3 Acquire & P3 Release & P4 \\
+\midrule
+Claude Opus 4.8   & pass & pass (326{,}592) & \textbf{89.3\%} (25/28) & 14/17 & 11/11 & 3/3 \\
+Claude Fable 5    & pass & pass (326{,}592) & \textbf{50.0\%} (14/28) & 14/17 & \textbf{0/11} & 3/3 \\
+Claude Sonnet 4.6 & pass & pass (326{,}592) & \textbf{50.0\%} (14/28) & 14/17 & 0/11 & 3/3 \\
+Claude Haiku 4.5  & pass & pass (326{,}592) & \textbf{21.4\%} (6/28)  & 6/17  & 0/11 & 3/3 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Two results stand out.
+
+\paragraph{Only the reality check discriminates.}
+Every model passes Phase 1, Phase 2 (all exploring the identical 326{,}592
+states, confirming structurally equivalent state spaces), and Phase 4. On
+this task those three phases have \emph{zero} discriminating power. Phase 3
+spreads the models across a $4\times$ range, and --- restricted to comparisons
+it can make --- orders Opus above the mid tier above Haiku. This
+independently reproduces, in a non-formal language, the central SysMoBench
+finding for \tlaplus{}: internal consistency is cheap; conformance with the
+real system is where specifications fail~\cite{sigops2026}.
+
+\paragraph{General capability does not predict modeling accuracy.}
+The most striking row is Fable~5, the most capable model tested, scoring
+50\% --- below Opus~4.8 and tied with mid-tier Sonnet. The cause is specific
+and systematic, not noise: Fable's specification handles acquisition
+competently (14/17) but \emph{no-ops every single release} (0/11). After any
+\texttt{ReleaseLock}, its model leaves the lock held:
+
+\begin{lstlisting}[style=code]
+ReleaseLock  expected {lockHeld: false, lockHolder: null}
+             got      {lockHeld: true,  lockHolder: 0}
+\end{lstlisting}
+
+The release logic \emph{reads} correctly in isolation --- it guards on the
+holder, then clears the state --- but on replay the release never takes
+effect: a categorical, whole-action modeling defect. Crucially, this
+specification passed syntax, explored 326{,}592 states without violation, and
+satisfied all three invariants, including mutual exclusion. (A lock that is
+never released trivially preserves mutual exclusion.) Only replay against
+the real kernel's transitions exposed it.
+
+The recurring failure among the passing acquisitions is also precise: all
+three 14/17 models fail exactly the three \texttt{try\_lock}-from-free
+windows --- the non-blocking acquire that should succeed on a free lock.
+Blocking acquisition (abundant in training data and in textbook treatments)
+is modeled correctly by every model except Haiku; the less common
+non-blocking path is where they slip. This echoes, at micro scale,
+SysMoBench's ``textbook modeling'' diagnosis: models reproduce the familiar
+template and miss the implementation-specific path.
+
+\section{Experiment 2: repair from trace feedback}
+\label{sec:repair}
+
+\subsection{Setup}
+
+If a model is shown \emph{exactly} which transitions its specification got
+wrong --- the pre-state, the action and its data, the real system's
+post-state, and what the model produced instead --- can it fix the
+specification? For each model we ran one repair round: score the original
+specification on Phase 3; build a repair prompt containing the full original
+module plus every failing window; ask the model to rewrite the module;
+confirm the result still passes Phase 1; re-score Phase 3 on the same
+28-window corpus.
+
+\subsection{Results}
+
+\begin{table}[ht]
+\centering
+\caption{One-round repair from Phase-3 feedback (same 28-window corpus).}
+\label{tab:repair}
+\small
+\begin{tabular}{lcccc}
+\toprule
+Model & Baseline P3 & Repaired P3 & Acquire (base$\to$rep) & Release (base$\to$rep) \\
+\midrule
+Claude Opus 4.8   & 89.3\% (25/28) & \textbf{100\%} (28/28) & 82\% $\to$ 100\% & 100\% $\to$ 100\% \\
+Claude Fable 5    & 50.0\% (14/28) & \textbf{100\%} (28/28) & 82\% $\to$ 100\% & \textbf{0\% $\to$ 100\%} \\
+Claude Sonnet 4.6 & 50.0\% (14/28) & 60.7\% (17/28) & 82\% $\to$ 100\% & 0\% $\to$ 0\% \\
+Claude Haiku 4.5  & 21.4\% (6/28)  & 21.4\% (6/28)  & 35\% $\to$ 35\%  & 0\% $\to$ 0\% \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\paragraph{Self-correction is a clean three-tier gradient.}
+Opus and Fable repair to a perfect 28/28 in a single round. Sonnet repairs
+\emph{partially}: it fixes the \texttt{try\_lock} acquisition defect
+completely but cannot fix its release path even when handed the exact failing
+transitions --- it uses one class of feedback and not the other. Haiku does
+not improve at all. The repair axis separates the four models into three
+distinct tiers (full / partial / none), more cleanly than the baseline
+scores, which conflate Fable and Sonnet at 50\%.
+
+\paragraph{The Fable reversal.}
+Fable's baseline looked no better than Sonnet's, and its failure mode ---
+a whole action silently broken --- looked worse. Yet under repair, Fable
+fully recovers while Sonnet, given identical feedback for the identical
+symptom (Release 0/11), cannot. This reframes the baseline: Fable's release
+defect was a \emph{recoverable slip}, not a capability ceiling, whereas
+Sonnet's is the latter. One-shot specification accuracy and
+repair-from-feedback are different axes of capability, and a benchmark that
+measures only the former will misrank models for any workflow that includes
+a correction loop --- which realistic agentic formal-modeling workflows
+do~\cite{sigops2026}.
+
+\paragraph{What this does and does not measure.}
+The repair prompt contains the failing windows themselves, so the experiment
+measures ``can the model exploit precise, correct feedback,'' not blind
+improvement. That is the intended question --- it is exactly the signal
+available inside an agentic repair loop --- but it is not a from-scratch
+re-test, and we ran a single round; whether Sonnet or Haiku converge with
+more rounds is untested.
+
+\section{Experiment 3: \jssam{} versus \tlaplus{}}
+\label{sec:vstla}
+
+\subsection{Setup}
+
+The head-to-head the backend exists to inform: the same four models, the same
+\texttt{spin} task, one \texttt{direct\_call} generation per model per
+language, scored on Phase 1 (syntax: SANY vs.\ module validation), Phase 2
+(model checking: TLC vs.\ bounded exploration), and Phase 4 (invariant
+verification, direct translator for both languages). Phase 3 is deliberately
+\emph{not} compared: \jssam{}'s Phase 3 is a self-contained direct replay
+while \tlaplus{}'s is a heavyweight coding-agent path --- different
+mechanisms, not a fair one-to-one. Phase 4 is compared as pass/fail because
+the two languages ship different invariant-template counts for \texttt{spin}
+(seven for \tlaplus{}, three for \jssam{}).
+
+\subsection{Results}
+
+\begin{table}[ht]
+\centering
+\caption{\jssam{} vs.\ \tlaplus{} on \texttt{spin}: models producing a
+passing artifact per phase.}
+\label{tab:vstla}
+\small
+\begin{tabular}{lccc}
+\toprule
+ & P1 syntax & P2 model-checkable & P4 invariants \\
+\midrule
+\jssam{}  & 4/4 & \textbf{4/4} & \textbf{4/4} \\
+\tlaplus{} & 4/4 & \textbf{1/4} & \textbf{1/4} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{table}[ht]
+\centering
+\caption{Per-model \tlaplus{} detail.}
+\label{tab:tladetail}
+\small
+\begin{tabular}{lcccl}
+\toprule
+Model & P1 & P2 & P4 & P2 failure cause \\
+\midrule
+Claude Opus 4.8   & pass & \textbf{fail} & fail & unbounded \texttt{CHOOSE} (TLC rejects) \\
+Claude Fable 5    & pass & pass (574 states) & pass (7 inv.) & --- \\
+Claude Sonnet 4.6 & pass & \textbf{fail} & fail & unbounded \texttt{CHOOSE} (TLC rejects) \\
+Claude Haiku 4.5  & pass & \textbf{fail} & fail & config generation fell back; no usable \texttt{.cfg} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\paragraph{Syntax is not where the languages differ.}
+Every model writes syntactically valid specifications in \emph{both}
+languages --- consistent with SysMoBench's finding that frontier models have
+essentially saturated \tlaplus{} syntax~\cite{sigops2026}. The divergence is
+at Phase 2: whether the specification is actually \emph{checkable}. All four
+\jssam{} modules run; one of four \tlaplus{} specifications does. Each
+\tlaplus{} failure is attributable to a specific structural cause.
+
+\paragraph{Cause 1: a \tlaplus{} semantic pitfall JavaScript does not have.}
+Opus and Sonnet both modeled ``no lock owner'' as
+\texttt{NULL == CHOOSE v : v \textbackslash notin Threads}. SANY accepts
+this --- syntax passes --- but TLC cannot evaluate an unbounded
+\texttt{CHOOSE}, so model checking fails. The idiom is natural, looks
+correct, and is a well-known TLC trap. JavaScript has a native \texttt{null},
+so the corresponding \jssam{} specifications express the same concept with no
+trap available to fall into. This structural hazard caught two of four
+models, \emph{including the model with the best \jssam{} conformance score}
+(Opus). It is a clean instance of the hypothesis's mechanism: the failure is
+not ``the model cannot model a spinlock'' (its JavaScript model of the same
+system scored 89.3\% against real traces) but ``the formal language exposes a
+semantic surface on which competent models slip.''
+
+\paragraph{Cause 2: a configuration surface \jssam{} does not have.}
+\tlaplus{} model checking requires a separate \texttt{.cfg} artifact
+(constants, init/next, invariants) that the harness must generate to match
+the specification; for Haiku, that generation fell back and produced no
+usable configuration (zero states explored). A \jssam{} module is
+self-contained and executable --- there is no second artifact to generate,
+so this entire failure mode is structurally absent. We flag the attribution
+honestly: the \texttt{CHOOSE} failures belong to the models; the Haiku
+failure belongs to the harness. But the asymmetry itself is structural ---
+one language's evaluability depends on a fragile secondary artifact and the
+other's does not.
+
+\paragraph{Net.}
+On this task, models reach an end-to-end evaluable specification far more
+readily in \jssam{} (4/4 through Phase 4) than in \tlaplus{} (1/4). This is
+direct --- though single-task --- evidence for the hypothesis in its
+practical form: \emph{host-language familiarity plus a self-contained
+executable artifact lowers the barrier to a usable specification.} It does
+not, by itself, show that \jssam{} specifications are more \emph{faithful};
+it shows they are far more often checkable at all, which is the precondition
+for faithfulness to be measured. Experiment 4 (\S\ref{sec:crosslang})
+measures faithfulness directly, under a design built to make the two
+languages comparable --- and resolves it in an unexpected place.
+
+\section{Experiment 4: cross-language conformance under a controlled contract}
+\label{sec:crosslang}
+
+Experiment 3 could not compare Phase 3 across languages because the two
+backends implement it by incomparable mechanisms: \jssam{} runs a mechanical
+replay, while \tlaplus{} runs a coding-agent path --- necessary because a
+free-form \tlaplus{} specification invents its own variable names, so mapping
+trace states onto spec states requires interpretation. A naive comparison
+would measure the replay machinery, not the specifications. This experiment
+removes that asymmetry with a pre-registered, paired design; the full
+methodology note, written to be socialized with the benchmark maintainers, is
+included in the artifact repository.
+
+\subsection{Design}
+
+\paragraph{Equalize the observable-state contract.}
+The degree of freedom that forces \tlaplus{} onto the agent path --- free
+choice of variables --- is one the \jssam{} prompt already removes by pinning
+\texttt{getState()}'s shape. We remove it symmetrically: a constrained
+\tlaplus{} prompt mandates \texttt{VARIABLES lockHeld, lockHolder} (the trace
+schema), action operators \texttt{AcquireLock(thread, callType)} /
+\texttt{ReleaseLock(thread)}, and a TLC-safe sentinel
+(\texttt{NONE == "none"}, not \texttt{CHOOSE}). Both languages then answer
+the identical question --- \emph{express this system over this observable
+state} --- and trace states map onto spec states with no interpretation.
+
+\paragraph{A direct TLC replay path (no agent).}
+With the contract fixed, \tlaplus{} transition validation becomes mechanical,
+mirroring \jssam{}'s \texttt{setState} $\to$ action $\to$ diff: for each
+window, a synthesized module pins the pre-state in its initial predicate,
+takes exactly one step of the window's action (then stutters), and asserts
+via an invariant that the post-state is unreachable; a TLC-reported violation
+means the window \emph{passes}. The replay was validated in both directions
+before use: a contract-following specification passes 28/28 (positive
+control), and the same specification with \texttt{ReleaseLock} mutated to a
+no-op fails exactly the 11 release windows, 17/17 acquires still passing
+(negative control). The replay discriminates; it does not trivially pass
+everything.
+
+\paragraph{Four arms, because the prompt and the contract are both confounds.}
+An initial two-arm run (deployed \jssam{} prompt vs.\ constrained \tlaplus{})
+produced what looked like a decisive \tlaplus{} reversal. But the constrained
+\tlaplus{} prompt \emph{states the exact single-step observable semantics}
+(free $\to$ acquire; held $\to$ unchanged; holder $\to$ release), which the
+deployed \jssam{} prompt does not: a difference in prompt content, not in
+language. And even with prompts equalized, the two substrates still differ in
+a second way --- the SAM contract obliges an executable module with
+proposal/acceptor wiring and auxiliary state, while the \tlaplus{}
+specification is a bare two-variable relation. We therefore ran four arms:
+\textbf{JS(deployed)} --- the shipped \jssam{} prompt;
+\textbf{JS(constrained)} --- the deployed prompt plus the \emph{identical}
+semantics block used by the \tlaplus{} arm;
+\textbf{plain-JS} --- the same constrained semantics, but the specification
+is a bare \texttt{next(state, action, data)} transition function over only
+$\{\mathit{lockHeld}, \mathit{lockHolder}\}$: JavaScript, yet structurally
+isomorphic to the \tlaplus{} relation, with no SAM library and no auxiliary
+state; and \textbf{TLA(constrained)}. JS(constrained) vs.\ TLA(constrained)
+varies language and contract together; plain-JS vs.\ TLA(constrained) varies
+\emph{only} the language; JS(constrained) vs.\ plain-JS varies \emph{only}
+the contract.
+
+\paragraph{Replication, pairing, and checkability.}
+$N{=}5$ generations per model per arm (80 in total), all scored per-window on
+the same 28-window kernel corpus. The design is naturally paired --- for each
+model, every window has an outcome in every arm --- so we report per-model
+McNemar tests (continuity-corrected, $\chi^2 > 3.84 \Rightarrow p < 0.05$)
+rather than comparing noisy means. The pre-registered checkability policy
+(conditional vs.\ unconditional scoring) proved moot: \emph{zero} windows
+were unscoreable in any constrained or plain-JS generation.
+
+\subsection{Results}
+
+\begin{table}[ht]
+\centering
+\caption{Cross-language Phase-3 conformance (mean pass rate over $N{=}5$
+generations per cell; 28-window corpus). Conditional and unconditional rates
+coincide --- no unscoreable windows.}
+\label{tab:crosslang}
+\small
+\begin{tabular}{lcccc}
+\toprule
+Model & JS (deployed) & JS (constrained) & plain-JS & \tlaplus{} (constrained) \\
+\midrule
+Claude Opus 4.8   & 81.4\% & 89.3\%          & \textbf{100\%} & \textbf{100\%} \\
+Claude Fable 5    & 57.9\% & 95.7\%          & \textbf{100\%} & \textbf{100\%} \\
+Claude Sonnet 4.6 & 50.0\% & \textbf{100\%}  & \textbf{100\%} & \textbf{100\%} \\
+Claude Haiku 4.5  & 28.6\% & 40.7\%          & \textbf{100\%} & \textbf{100\%} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{table}[ht]
+\centering
+\caption{Paired McNemar over windows, aggregated across generations
+($b$ = JS-only pass, $c$ = \tlaplus{}-only pass; $^{*}$ = $p<0.05$). The
+plain-JS arm is a perfect per-window tie with \tlaplus{} for every model
+($b{=}0$, $c{=}0$, $\chi^2{=}0.0$) and is omitted from the table.}
+\label{tab:mcnemar}
+\small
+\begin{tabular}{lcc}
+\toprule
+Model & JS(deployed) vs.\ TLA & JS(constrained) vs.\ TLA \\
+\midrule
+Opus 4.8   & $b{=}0$, $c{=}26$, $\chi^2{=}24.0^{*}$  & $b{=}0$, $c{=}15$, $\chi^2{=}13.1^{*}$ \\
+Fable 5    & $b{=}0$, $c{=}59$, $\chi^2{=}57.0^{*}$  & $b{=}0$, $c{=}6$,  $\chi^2{=}4.2^{*}$  \\
+Sonnet 4.6 & $b{=}0$, $c{=}70$, $\chi^2{=}68.0^{*}$  & $b{=}0$, $c{=}0$,  $\chi^2{=}0.0$      \\
+Haiku 4.5  & $b{=}0$, $c{=}100$, $\chi^2{=}98.0^{*}$ & $b{=}0$, $c{=}83$, $\chi^2{=}81.0^{*}$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Findings}
+
+\paragraph{Most of the apparent \tlaplus{} advantage was prompt
+prescriptiveness, not language.}
+Adding the same semantics block to the JavaScript prompt --- changing nothing
+else --- moved Fable from 57.9\% to 95.7\% and Sonnet from 50.0\% to a
+perfect 100\%. Had we reported the two-arm run, the headline would have been
+a decisive language reversal; most of that effect was the prompt. We regard
+catching this as a result in its own right: \emph{prompt prescriptiveness is
+a first-class experimental variable in specification-generation benchmarks},
+large enough to masquerade as a language effect.
+
+\paragraph{A real, one-directional residual survives the prompt control.}
+With identical semantics in both prompts, \tlaplus{} reaches 100\%
+conformance for \emph{every model and every generation}, while constrained
+\jssam{} does so only for Sonnet. The residual is statistically significant
+for Opus, Fable, and Haiku, vanishes for Sonnet, and is largest for the
+weakest model (Haiku: 40.7\% vs.\ 100\%). Moreover $b{=}0$ in every
+comparison: no \jssam{} specification ever passed a window that its
+\tlaplus{} counterpart failed. (When one arm is at 100\% this is partly
+structural --- see \S\ref{sec:limitations} --- but the direction is uniform
+in the deployed arm as well.)
+
+\paragraph{The plain-JS arm locates the residual: it is the contract, not
+the language.}
+The fourth arm ties \tlaplus{} at 100\% for every model and every generation
+--- $b{=}0$, $c{=}0$, $\chi^2{=}0.0$ for all four models: perfect per-window
+ties across all paired generation-sets. Haiku is the cleanest single datum:
+the weakest model, which reaches only 40.7\% through SAM's machinery,
+expresses the identical semantics perfectly as a bare transition function
+--- in the same language. Three attributions fall out.
+\emph{It is not the language}: same JavaScript, different shape, 100\%.
+\emph{It is not formality}: \tlaplus{} and plain-JS share the same shape ---
+a minimal declarative single-step transition over exactly the observable
+state --- and both sit at 100\%; what the three-arm data suggested was
+``formal directness'' is really \emph{minimal declarative shape}.
+\emph{It is the SAM contract's defect surface}: proposal/acceptor wiring,
+intent firing, and the mandatory auxiliary state
+(\texttt{threadStatus}, \texttt{callType}) --- precisely where
+Experiment 1's \texttt{try\_lock}-from-free and release bugs lived. Every
+moving part the contract obliges is transcription surface, and the tax falls
+hardest on the weakest model (Haiku pays 59 points; Sonnet pays nothing).
+
+\paragraph{Verdict against the pre-registered outcomes.}
+Not the strong ``\jssam{} wins'' (the direction is reversed), and not a tie
+at the backend level --- but at the \emph{language} level, a tie is exactly
+what the controlled comparison shows: JavaScript expresses the transition
+relation as reliably as \tlaplus{} once the specification shape is matched.
+The pre-registered outcome list did not anticipate this resolution; we note
+for transparency that the plain-JS arm was designed after the three-arm
+results were known (though scored blind, by the same mechanical replay, on
+the same corpus).
+
+\paragraph{Design implication for \jssam{}.}
+The Phase-3 fidelity gap is the cost of the SAM specification contract, not
+a language limit --- and the two can be decoupled. The backend can offer a
+lean specification shape (\texttt{next(state, action, data)}, the JavaScript
+analogue of the \tlaplus{} relation), or score conformance against a plain
+transition core over only the observable variables, dropping the mandatory
+auxiliary state from the replay contract. SAM's ceremony is not gratuitous
+--- the instance, intents, and value domains are exactly what feed the
+Phase-2/4 bounded explorer --- but it should be paid where it buys
+something: explorable structure for model checking, not conformance replay.
+A prototype confirms the decoupling is practical: a reference lean
+specification plus a $\sim$40-line generic breadth-first explorer over
+\texttt{\{init, next\}} runs the entire pipeline in the same locked-down
+sandbox --- Phase 2 passes, all three Phase-4 invariants hold, and Phase 3
+scores 28/28 --- so the SAM machinery is not \emph{required} by any phase.
+(The caveat: \texttt{spin}'s observable state is tiny --- three reachable
+states --- so the lean explorer's adequacy must be re-validated on richer
+tasks before generalizing.)
+
+\paragraph{Checkability, revisited.}
+Zero unscoreable generations in the constrained \tlaplus{} arm confirms
+Experiment 3's attribution: the earlier ``1/4 model-checkable'' was entirely
+the unbounded-\texttt{CHOOSE} trap plus the configuration surface, both of
+which the pinned contract and direct replay remove. The checkability gap is
+real but shallow --- a matter of guardrails, not capability.
+
+\paragraph{A free variance check on Experiment 1.}
+The JS(deployed) arm replicates Experiment 1's setting at $N{=}5$. The
+single-generation scores (89.3, 50.0, 50.0, 21.4) sit near the five-run means
+(81.4, 57.9, 50.0, 28.6), and the model ordering is preserved (with Fable's
+mean now slightly above Sonnet's). Experiment 1's qualitative conclusions
+survive replication; its exact figures move by up to $\sim$8 points, which is
+the error bar readers should apply to any single-generation number in this
+paper.
+
+\section{Discussion}
+\label{sec:discussion}
+
+\paragraph{``Looks right'' is not ``is right,'' in any language.}
+The four experiments repeatedly produced specifications that passed every
+internal-consistency check while being wrong about the real system --- most
+vividly Fable's never-releasing lock, which preserved mutual exclusion
+\emph{because} it was broken. Phase 3's value is not incremental rigor; it is
+the only phase whose ground truth is external to the model. This replicates
+SysMoBench's core claim~\cite{sysmobench,sigops2026} in a new language
+substrate, which strengthens it: the phenomenon is about LLM modeling, not
+about \tlaplus{}.
+
+\paragraph{The familiar path is modeled; the unfamiliar path is not.}
+For the three stronger models, every Experiment-1 failure lands on a
+less-common code path: the non-blocking \texttt{try\_lock}-from-free
+acquisition (all three) and release bookkeeping (two of the three).
+Blocking acquisition --- the version of a spinlock every textbook
+presents --- was modeled correctly by all but the smallest model. This is
+the ``textbook template'' failure mode of \cite{sigops2026} reproduced at
+the granularity of individual actions within a 100-line system.
+
+\paragraph{Repair belongs in the evaluation loop.}
+The repair experiment suggests that single-shot leaderboard scores understate
+some models (Fable) and overstate the ceiling of others (Sonnet, Haiku). Since
+practical formal-modeling deployments will be agentic loops with exactly this
+kind of counterexample feedback, benchmarks arguably should report both axes.
+The repair driver we contribute makes the second axis cheap to measure for
+any \jssam{} task.
+
+\paragraph{The hypothesis, after Experiment 4: a split verdict, sharply
+located.}
+The practical form of the hypothesis survives: host-language familiarity plus
+a self-contained executable artifact gets models to an evaluable
+specification far more often (4/4 vs.\ 1/4), and evaluability is the
+precondition for everything else. The strong form --- that familiarity yields
+more \emph{faithful} models --- resolves to a tie once like is compared with
+like: JavaScript in the shape of the \tlaplus{} relation matches \tlaplus{}
+at 100\% for every model. What the three-arm data made look like a language
+effect was the specification contract: every layer of machinery between the
+semantics and the artifact --- proposals, acceptors, auxiliary state --- is
+surface on which transcription slips, and the tax falls hardest on the
+weakest models. Neither training-data abundance nor formality is the
+operative variable on this task; \emph{contract minimality} is. And the
+largest single effect in the study is still the prompt
+(Sonnet 50\%$\to$100\%): prompt, then contract, then language is the order
+of what mattered here.
+
+\section{Limitations and threats to validity}
+\label{sec:limitations}
+
+We state these plainly; the study is a case study and should be read as one.
+
+\begin{itemize}
+\item \textbf{One task.} Everything here concerns a single system --- a
+  spinlock, the \emph{easiest} class of SysMoBench task. Distributed
+  protocols with richer state (Raft variants, ring buffers, lock services)
+  may reorder every result. The spinlock's simplicity is also why Phases
+  1/2/4 saturate; on harder tasks they discriminate too~\cite{sigops2026}.
+\item \textbf{Experiments 1--3 are single-generation.} Each cell in
+  Tables~\ref{tab:models}--\ref{tab:tladetail} is one sample. Experiment 4's
+  $N{=}5$ deployed-JS arm retroactively bounds the damage --- ordering
+  preserved, individual scores moving by up to $\sim$8 points --- but the
+  repair-loop and checkability experiments have not been replicated and
+  should be read with that error bar.
+\item \textbf{28 trace windows from two deterministic scenarios.} Contention
+  is expressed via \texttt{try\_lock} on a single CPU; true SMP interleavings
+  and a blocking waiter's wakeup are not represented. The corpus is faithful
+  to real kernel executions but does not exhaust the lock's behavior.
+\item \textbf{The \tlaplus{} comparison mixes causes.} The 1/4-vs-4/4 result
+  bundles a genuine model-attributable pitfall (unbounded \texttt{CHOOSE},
+  2/4) with a harness shortfall (config generation, 1/4). We report the
+  attribution per model (Table~\ref{tab:tladetail}); the headline number
+  should not be read as purely a language effect. No repair round was run on
+  the \tlaplus{} side --- a repaired Opus might fix its \texttt{CHOOSE}
+  readily, and symmetry demands that experiment before strong claims.
+\item \textbf{Experiment 4 measures transcription, not derivation.} With the
+  semantics block present, the constrained and plain arms measure how
+  reliably a model \emph{transcribes} near-spec-level semantics into a
+  language, not whether it can \emph{derive} the semantics from source code.
+  The deployed-JS arm is the closer proxy for derivation --- and there the
+  gap is much larger --- but there is no deployed-\tlaplus{} arm to pair it
+  with (free-form \tlaplus{} was mostly uncheckable), so the
+  derivation-level comparison remains open.
+\item \textbf{The plain-JS arm resolves the substrate asymmetry, but was
+  added post hoc and answers a narrower question.} The three-arm design left
+  ``executable machinery admits bugs a two-variable relation cannot'' as an
+  open alternative; the fourth arm was designed to test exactly that, after
+  the three-arm results were known (its data were then collected by the same
+  blind mechanical replay). Its conclusion is also bounded: a bare
+  \texttt{next()} function carries no SAM instance, intents, or value
+  domains, so it feeds Phase 3 only --- the lean shape's cost at Phases 2
+  and 4 is unmeasured, and the ``contract tax'' finding applies to
+  conformance, not to the whole benchmark.
+\item \textbf{$b{=}0$ is partly structural.} When the \tlaplus{} arm passes
+  every window it fails none, so a JS-only pass is impossible by
+  construction; the McNemar then reduces to whether the \jssam{} failure
+  count is significant. We report it for completeness, not as an independent
+  directional finding.
+\item \textbf{The direct TLC replay is the controlled condition, not the
+  deployed one.} The benchmark ships an agent-mediated \tlaplus{} Phase 3;
+  pinning spec variables to the trace schema trades realism for
+  comparability. Whether a ``pinned-schema'' Phase-3 mode should exist as a
+  first-class controlled condition alongside the agent path is a
+  methodological question we are putting to the maintainers.
+\item \textbf{Phase 4 differs in template count} (seven \tlaplus{} invariants
+  vs.\ three \jssam{}), so it is compared pass/fail only, and the \jssam{}
+  invariant set is the weaker filter.
+\item \textbf{Model family.} All four models are from one vendor. The
+  benchmark's configuration already includes other vendors' models; the
+  comparison should be broadened before generalizing.
+\item \textbf{Author positionality.} The first author is the author of the
+  SAM pattern. The evaluation pipeline is automated and the corpus is
+  model-independent, which limits (but does not eliminate) the room for
+  favorable design choices; all code, prompts, traces, and drivers are
+  public for scrutiny. We note that the study's sharpest negative finding
+  --- the contract-tax attribution --- cuts \emph{against} the SAM
+  contract as deployed, which we take as evidence the pipeline is not
+  tilted toward it.
+\end{itemize}
+
+\section{Related work}
+\label{sec:related}
+
+\paragraph{Benchmarking LLM formal modeling.}
+SysMoBench~\cite{sysmobench,sigops2026} is the direct foundation of this
+work: it contributes the four-phase methodology, the eleven-system task
+suite, and the finding that conformance --- not syntax --- is where LLM
+specifications fail. Our contribution is orthogonal: holding the benchmark
+fixed and varying the specification \emph{language}, including the first
+non-formal one. The Specula agent~\cite{specula} shows that agentic
+workflows can saturate current SysMoBench tasks in \tlaplus{}; our repair
+experiment probes the smallest unit of such a workflow (one counterexample
+round) across models.
+
+\paragraph{Trace conformance for specifications.}
+Validating specifications against implementation traces has industrial
+precedent: MongoDB's eXtreme modeling checked \tlaplus{} models against
+driver traces~\cite{davis2020extreme}, and trace validation is the standard
+answer to ``does the spec match the code''~\cite{sysmobench}. SysMoBench's
+transition-window formulation, which we adopt unchanged, makes conformance
+per-action and per-window rather than whole-trace.
+
+\paragraph{Formal methods practice.}
+\tlaplus{}~\cite{lamport2002specifying} with TLC~\cite{yu1999tlc},
+Alloy~\cite{jackson2002alloy}, and CSP-based PAT~\cite{sun2009pat} are the
+benchmark's formal backends; industrial deployments
+(e.g.,~\cite{newcombe2015amazon}) motivate the whole enterprise. SAM
+\cite{sam,dubray2016infoq} occupies an unusual position: an engineering
+pattern with \tlaplus{}-derived semantics, here repurposed as a
+specification language precisely because it sits at the intersection of
+``formally disciplined'' and ``abundant in training data.''
+
+\section{Conclusion and future work}
+\label{sec:conclusion}
+
+We extended SysMoBench with \jssam{}, its first non-formal specification
+backend, built the kernel trace-capture pipeline needed to give it a real
+conformance phase, and ran four experiments on the Asterinas spinlock task.
+The results make four points with unusual precision for a single case study:
+transition validation against real traces is the only phase that
+discriminated among four frontier models (21.4\%--89.3\%, with all other
+phases unanimous); one round of trace-feedback repair separates models into
+full/partial/no self-correction tiers that one-shot scores conceal; the same
+models that reach an evaluable specification in JavaScript 4/4 times manage
+it in \tlaplus{} 1/4 times, for two identifiable structural reasons; and
+under a pre-registered, paired, four-arm controlled comparison, the
+faithfulness question resolves in an unexpected place --- most of an
+apparent \tlaplus{} conformance advantage was prompt prescriptiveness, and
+the residual that survives is attributable to the SAM contract's machinery,
+not to JavaScript and not to formality: plain JavaScript in the shape of the
+\tlaplus{} relation ties \tlaplus{} at 100\% for every model.
+
+The hypothesis that motivated the backend is neither confirmed nor dead; it
+is sharpened twice over. Familiarity buys \emph{checkability}; contract
+minimality buys \emph{transcription fidelity}; and the prompt buys more than
+either. The experiments that follow are concrete: (1)~promoting the lean
+specification shape from prototype to backend: the reference implementation
+(a generic \texttt{\{init, next\}} explorer that already passes all phases
+on \texttt{spin}) supports three integration paths --- a first-class lean
+backend, a hybrid where the model writes only the pure core and the harness
+generates the SAM scaffolding, or the documented status quo --- and should
+next be exercised with model-generated specifications on richer tasks;
+(2)~a derivation-level comparison --- both languages, \emph{no}
+semantics block, on a task rich enough that the semantics cannot be guessed
+from the action names (ring buffer or lock service), which remains the
+decisive open test of the familiarity claim; (3)~a prompt-prescriptiveness
+dose--response study, treating the semantics block as the manipulated
+variable rather than a nuisance; (4)~an as-deployed agent-path arm beside
+the controlled replay, for ecological validity; (5)~a \tlaplus{} repair
+round for symmetry with Experiment 2; and (6)~replication beyond one model
+family. We are contributing the backend, harnesses, drivers, corpora, and
+the controlled-comparison methodology upstream so these can be run --- and
+challenged --- by the community.
+
+\section*{Acknowledgments}
+We thank the SysMoBench / Specula maintainers for the benchmark, the
+integration guidance that shaped the \jssam{} backend's scope, and the
+reference instrumentation for the Asterinas spinlock.
+
+\section*{Reproducibility}
+All artifacts are public: the \jssam{} backend
+(\texttt{tla\_eval/languages/js\_sam.py}, \texttt{tools/js-sam/}), the trace
+harness (\texttt{scripts/harness/spin/}), the captured corpus
+(\texttt{data/sys\_traces/spin/}), the repair driver
+(\texttt{scripts/repair\_phase3.py}), the Experiment-4 apparatus --- the
+constrained and plain-JS prompts, the direct TLC replay
+(\texttt{scripts/tla\_direct\_tv.py}), the paired four-arm driver with raw
+per-window data (\texttt{scripts/tla\_phase3\_study.py},
+\texttt{output/tla\_phase3\_study.json}), the pre-registered design and
+results (\texttt{docs/js\_sam\_tla\_phase3\_*.md}), the lean-contract
+prototype (\texttt{tools/plain-js/}, \texttt{scripts/plain\_js\_tv.py},
+\texttt{docs/js\_sam\_lean\_contract.md}), and the methodology note
+(\texttt{paper/methodology.md}) --- and the experiment write-ups
+(\texttt{docs/js\_sam\_*.md}) in the SysMoBench fork at
+\url{https://github.com/jdubray/SysMoBench-1}, staged as stacked pull
+requests against \url{https://github.com/specula-org/SysMoBench}.
+Requirements: Docker, Node $\geq$ 20, Python 3, and (for the \tlaplus{} arm)
+Java with \texttt{tla2tools}. A single script reproduces the kernel capture:
+\texttt{scripts/harness/spin/run.sh}.
+
+\begin{thebibliography}{10}
+\small
+
+\bibitem{sysmobench}
+Q.~Cheng, R.~Tang, E.~Ma, F.~Hackett, P.~He, Y.~Su, I.~Beschastnikh,
+Y.~Huang, X.~Ma, and T.~Xu.
+\newblock SysMoBench: Evaluating AI on formally modeling real-world systems.
+\newblock arXiv:2509.23130, 2025. Leaderboard: \url{https://sysmobench.com}.
+
+\bibitem{sigops2026}
+Q.~Cheng, R.~Tang, E.~Ma, F.~Hackett, P.~He, Y.~Su, I.~Beschastnikh,
+Y.~Huang, X.~Ma, and T.~Xu.
+\newblock Can LLMs model real-world systems in TLA+?
+\newblock ACM SIGOPS Blog, May 2026.
+\newblock \url{https://www.sigops.org/2026/can-llms-model-real-world-systems-in-tla/}.
+
+\bibitem{lamport2002specifying}
+L.~Lamport.
+\newblock \emph{Specifying Systems: The TLA+ Language and Tools for Hardware
+  and Software Engineers}.
+\newblock Addison-Wesley, 2002.
+
+\bibitem{yu1999tlc}
+Y.~Yu, P.~Manolios, and L.~Lamport.
+\newblock Model checking TLA+ specifications.
+\newblock In \emph{CHARME}, 1999.
+
+\bibitem{jackson2002alloy}
+D.~Jackson.
+\newblock Alloy: A lightweight object modelling notation.
+\newblock \emph{ACM TOSEM}, 11(2), 2002.
+
+\bibitem{sun2009pat}
+J.~Sun, Y.~Liu, J.~S. Dong, and J.~Pang.
+\newblock PAT: Towards flexible verification under fairness.
+\newblock In \emph{CAV}, 2009.
+
+\bibitem{newcombe2015amazon}
+C.~Newcombe, T.~Rath, F.~Zhang, B.~Munteanu, M.~Brooker, and M.~Deardeuff.
+\newblock How Amazon Web Services uses formal methods.
+\newblock \emph{Communications of the ACM}, 58(4), 2015.
+
+\bibitem{davis2020extreme}
+A.~J. Davis, M.~Hirschhorn, and J.~Schvimer.
+\newblock eXtreme modelling in practice.
+\newblock \emph{PVLDB}, 13(9), 2020.
+
+\bibitem{sam}
+J.-J. Dubray.
+\newblock The SAM pattern.
+\newblock \url{https://sam.js.org}.
+
+\bibitem{dubray2016infoq}
+J.-J. Dubray.
+\newblock Why I no longer use MVC frameworks.
+\newblock InfoQ, February 2016.
+\newblock \url{https://www.infoq.com/articles/no-more-mvc-frameworks/}.
+
+\bibitem{sampattern}
+J.-J. Dubray.
+\newblock \texttt{sam-pattern}: a library implementing the SAM pattern.
+\newblock \url{https://www.npmjs.com/package/@cognitive-fab/sam-pattern}.
+
+\bibitem{asterinas}
+Asterinas project.
+\newblock Asterinas: a Linux ABI-compatible, Rust-based framekernel OS.
+\newblock \url{https://github.com/asterinas/asterinas}.
+
+\bibitem{specula}
+Specula project.
+\newblock Specula: an agent specialized in TLA+ formal modeling.
+\newblock \url{https://github.com/specula-org/Specula}.
+
+\end{thebibliography}
+
+\end{document}
