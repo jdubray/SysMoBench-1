@@ -28,21 +28,12 @@ def _user_args():
     return ["--user", "1000:1000"]
 
 
-def _run(spec_path: Path, windows, timeout: int):
+def _run_script(script: str, spec_path: Path, extra: dict, timeout: int):
+    """Run tools/plain-js/<script> in the sandbox with a JSON request built from
+    {specPath: <container path>} + extra; return the parsed JSON response or None."""
     spec = Path(spec_path).resolve()
     container_spec = f"{_CONTAINER_WORK}/spin.js"
-    request = {
-        "specPath": container_spec,
-        "windows": [
-            {
-                "action": action["name"] if isinstance(action, dict) else action,
-                "data": action.get("data", {}) if isinstance(action, dict) else {},
-                "preState": pre,
-                "postState": post,
-            }
-            for action, pre, post in windows
-        ],
-    }
+    request = {"specPath": container_spec, **extra}
     cmd = [
         "docker", "run", "--rm", "-i", "--network", "none",
         *_user_args(), "--read-only", "--tmpfs", "/tmp", "-e", "HOME=/tmp",
@@ -50,7 +41,7 @@ def _run(spec_path: Path, windows, timeout: int):
         "-v", f"{_mount(HELPER_DIR)}:{_CONTAINER_HELPER}:ro",
         "-v", f"{_mount(spec)}:{container_spec}:ro",
         "-w", _CONTAINER_HELPER, DOCKER_IMAGE,
-        "node", f"{_CONTAINER_HELPER}/tv.mjs",
+        "node", f"{_CONTAINER_HELPER}/{script}",
     ]
     try:
         proc = subprocess.run(cmd, input=json.dumps(request),
@@ -64,11 +55,33 @@ def _run(spec_path: Path, windows, timeout: int):
 
 
 def plain_js_tv(spec_path, windows, timeout: int = 120):
-    resp = _run(Path(spec_path), windows, timeout)
+    """Phase 3: per-window ['pass'|'fail'|'unscoreable'] for a lean-contract spec."""
+    extra = {
+        "windows": [
+            {
+                "action": action["name"] if isinstance(action, dict) else action,
+                "data": action.get("data", {}) if isinstance(action, dict) else {},
+                "preState": pre,
+                "postState": post,
+            }
+            for action, pre, post in windows
+        ]
+    }
+    resp = _run_script("tv.mjs", Path(spec_path), extra, timeout)
     nw = len(windows)
     if not resp or not resp.get("ok"):
         return ["unscoreable"] * nw
     statuses = [r["status"] for r in resp.get("results", [])]
-    if len(statuses) != nw:
-        return ["unscoreable"] * nw
-    return statuses
+    return statuses if len(statuses) == nw else ["unscoreable"] * nw
+
+
+def plain_js_explore(spec_path, actions, invariants, depth_max: int = 6, timeout: int = 120):
+    """Phases 2 & 4 for a lean-contract spec: bounded exploration + invariant check.
+
+    Returns the explorer's report dict, or {'ok': False, ...} on failure.
+    `actions` is the input domain [{'action', 'data'}, ...]; `invariants` is
+    [{'name', 'predicate'}] with predicate a "(state) => boolean" source string.
+    """
+    extra = {"actions": actions, "invariants": invariants, "depthMax": depth_max}
+    resp = _run_script("explore.mjs", Path(spec_path), extra, timeout)
+    return resp or {"ok": False, "error": "explorer produced no output"}
