@@ -10,6 +10,8 @@
 #   {"seq":N,"thread":T,"lock":0,"state":"locked|unlocked","action":A,"actor":T}
 # which scripts/harness/spin/parse_traces.py folds into NDJSON windows.
 set -e
+# $1 = ktest name to run (default: test_spin_2thread)
+KTEST="${1:-test_spin_2thread}"
 export PATH=/nix/store/4zpvbvn0cvmmn9k05b1qgr5xh7i6r9ka-nix-2.31.1/bin:$PATH
 echo 'connect-timeout = 60000' >> /etc/nix/nix.conf
 
@@ -26,8 +28,8 @@ echo "===== installing cargo-osdk ====="
 OSDK_LOCAL_DEV=1 cargo install cargo-osdk --path osdk --locked
 echo "===== make initramfs ====="
 make initramfs
-echo "===== cargo osdk test (test_spin_2thread) ====="
+echo "===== cargo osdk test ($KTEST) ====="
 cd ostd
 timeout 1200 cargo osdk test --features tla-trace --target-arch x86_64 \
-  --qemu-args='-accel tcg' test_spin_2thread 2>&1
+  --qemu-args='-accel tcg' "$KTEST" 2>&1
 echo "===== DONE rc=$? ====="
