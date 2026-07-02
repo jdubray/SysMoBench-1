@@ -45,7 +45,8 @@ explorer instead:
 - **Phase 3 (transition validation)** — `tools/plain-js/tv.mjs` replays the trace
   windows through `next` (`scripts/plain_js_tv.py`).
 
-Both run in the same locked-down Docker sandbox JS-SAM already uses. Demo:
+Both run in the same locked-down Docker sandbox JS-SAM already uses. Demo on the
+reference spec:
 
 ```
 $ python scripts/lean_demo.py
@@ -55,14 +56,34 @@ $ python scripts/lean_demo.py
 Lean contract runs the full pipeline: ALL PHASES PASS
 ```
 
-Pass a model-generated lean spec as an argument to score it the same way.
+### Demonstrated on model-generated specs (N=5, four models)
+
+The demo above uses a hand-written reference spec. `scripts/lean_full_pipeline_study.py`
+closes the loop: it generates N lean specs per model from the plain-JS prompt,
+**saves each one**, and runs Phases 2/3/4 on the *same* saved spec. Every generated
+spec passes every phase:
+
+| Model | loadable | Phase 2 clean | Phase 3 = 28/28 | Phase 4 hold | **all phases** |
+|---|---|---|---|---|---|
+| Opus 4.8 | 5/5 | 5/5 | 5/5 | 5/5 | **5/5** |
+| Fable 5 | 5/5 | 5/5 | 5/5 | 5/5 | **5/5** |
+| Sonnet 4.6 | 5/5 | 5/5 | 5/5 | 5/5 | **5/5** |
+| Haiku 4.5 | 5/5 | 5/5 | 5/5 | 5/5 | **5/5** |
+
+**20/20 model-generated lean specs pass every phase.** This merges the two earlier
+half-results — the prototype validated Phases 2/4 on a reference spec; the paired
+study validated Phase 3 on model-generated specs — into a single coherent artifact
+set: the saved specs (`output/lean_specs/`) and per-spec per-phase results
+(`output/lean_full_pipeline.json`) are the same 20 files across all phases.
 
 ## Integration options for SysMoBench
 
 1. **A lean backend / spec shape (recommended for Phase-3 fidelity).** Offer the
    `{init, next}` contract as a first-class JS spec shape alongside JS-SAM, with
    the generic explorer for Phases 2/4 and the direct `next` replay for Phase 3.
-   Cheapest to adopt; the prototype is the reference implementation.
+   Cheapest to adopt; the prototype is the reference implementation, and the
+   N=5×4-model run above shows model-generated lean specs already pass the whole
+   pipeline end-to-end — this path is demonstrated, not just plausible.
 2. **Hybrid: lean core, SAM scaffolding auto-generated.** Keep the SAM pattern for
    its modeling story, but have the model write only the pure `next` core and let
    the harness wrap it in the SAM boilerplate for Phases 2/4. The model never
@@ -89,4 +110,7 @@ Pass a model-generated lean spec as an argument to score it the same way.
   `tla_eval/tasks/spin/prompts/plain-js/direct_call.txt`.
 - Runners: `tools/plain-js/tv.mjs` (Phase 3), `tools/plain-js/explore.mjs`
   (Phases 2/4); Python: `scripts/plain_js_tv.py`.
-- Demo: `scripts/lean_demo.py`.
+- Demo: `scripts/lean_demo.py` (reference spec, all phases).
+- End-to-end study: `scripts/lean_full_pipeline_study.py` (N generations/model
+  through all phases). Artifacts: `output/lean_specs/<model>_<gen>.js`,
+  `output/lean_full_pipeline.json`.
