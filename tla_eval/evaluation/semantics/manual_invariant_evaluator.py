@@ -314,87 +314,39 @@ class AgentInvariantTranslator:
         Returns:
             Tuple of (success, {invariant_name: translated_invariant}, error_message)
         """
-        import asyncio
-        import json
-        import tempfile
-        import shutil
+        from .agent_translation import run_agent_translation
 
-        try:
-            # Create temporary workspace
-            workspace_dir = Path(tempfile.mkdtemp(prefix="inv_translator_"))
-            logger.info(f"Created agent workspace at: {workspace_dir}")
+        templates_data = [
+            {
+                "name": t.name,
+                "type": t.type,
+                "natural_language": t.natural_language,
+                "formal_description": t.formal_description,
+                "tla_example": t.tla_example,
+            }
+            for t in templates
+        ]
+        templates_yaml = yaml.dump(
+            templates_data, default_flow_style=False, allow_unicode=True
+        )
 
-            try:
-                agent_cli = self._select_agent_cli(model_name)
-                instruction_filename = "CODEX.md" if agent_cli == "codex" else "CLAUDE.md"
+        success, output_content, error = run_agent_translation(
+            instructions=self._build_claude_md(templates),
+            extra_files={
+                "specification.tla": tla_content,
+                "templates.yaml": templates_yaml,
+            },
+            model_name=model_name,
+            timeout=self.timeout,
+        )
+        if not success:
+            return False, {}, error
 
-                # Write specification file
-                spec_file = workspace_dir / "specification.tla"
-                spec_file.write_text(tla_content, encoding="utf-8")
-
-                # Write templates as YAML
-                templates_data = []
-                for t in templates:
-                    templates_data.append({
-                        "name": t.name,
-                        "type": t.type,
-                        "natural_language": t.natural_language,
-                        "formal_description": t.formal_description,
-                        "tla_example": t.tla_example
-                    })
-
-                templates_file = workspace_dir / "templates.yaml"
-                with open(templates_file, 'w', encoding='utf-8') as f:
-                    yaml.dump(templates_data, f, default_flow_style=False, allow_unicode=True)
-
-                # Create output directory
-                output_dir = workspace_dir / "output"
-                output_dir.mkdir(exist_ok=True)
-
-                # Write agent instructions
-                claude_md = self._build_claude_md(templates)
-                (workspace_dir / instruction_filename).write_text(claude_md, encoding="utf-8")
-
-                # Execute agent CLI
-                start_time = time.time()
-                result = asyncio.run(
-                    self._execute_agent_cli(workspace_dir, model_name, agent_cli)
-                )
-                duration = time.time() - start_time
-
-                if not result["success"]:
-                    return False, {}, result.get("error", "Agent execution failed")
-
-                logger.info(f"{agent_cli} agent completed in {duration:.2f}s")
-
-                # Read output
-                output_file = output_dir / "invariants.json"
-                if not output_file.exists():
-                    return False, {}, "Agent did not produce output file: output/invariants.json"
-
-                output_content = output_file.read_text(encoding="utf-8")
-
-                # Parse JSON output
-                translated_invariants = self._parse_agent_output(output_content, templates)
-
-                logger.info(f"Successfully translated {len(translated_invariants)} invariants via agent")
-                return True, translated_invariants, None
-
-            finally:
-                # Cleanup workspace
-                shutil.rmtree(workspace_dir, ignore_errors=True)
-
-        except Exception as e:
-            logger.error(f"Agent invariant translation failed: {e}")
-            return False, {}, str(e)
-
-    def _select_agent_cli(self, model_name: str) -> str:
-        """Select agent CLI from model name. Claude Code aliases route to claude; others use codex."""
-        normalized = (model_name or "").strip().lower()
-        claude_aliases = {"default", "sonnet", "haiku", "opus"}
-        if not normalized or normalized in claude_aliases or normalized.startswith("claude"):
-            return "claude"
-        return "codex"
+        translated_invariants = self._parse_agent_output(output_content, templates)
+        logger.info(
+            "Successfully translated %d invariants via agent", len(translated_invariants)
+        )
+        return True, translated_invariants, None
 
     def _build_claude_md(self, templates: List[InvariantTemplate]) -> str:
         """Build CLAUDE.md instructions for the agent."""
@@ -471,91 +423,6 @@ Write a JSON file to `./output/invariants.json` with this exact format:
 3. Use only variables and constants that exist in the specification
 4. Output MUST be valid JSON
 '''
-
-    async def _execute_agent_cli(self, workspace_path: Path, model_name: str, agent_cli: str) -> dict:
-        """Execute Claude Code or Codex in the workspace."""
-        import asyncio
-
-        if agent_cli == "codex":
-            model = model_name if model_name and model_name not in {"default", "codex"} else ""
-            cmd = [
-                "codex",
-                "exec",
-                "--dangerously-bypass-approvals-and-sandbox",
-                "--skip-git-repo-check",
-                "-c", 'model_reasoning_effort="high"',
-            ]
-            if model:
-                cmd.extend(["-m", model])
-            cmd.append("Read CODEX.md and complete the invariant translation task.")
-        else:
-            # The `claude` CLI accepts model codes (sonnet/opus/haiku) or
-            # full model IDs (claude-*) — not SysMoBench aliases like
-            # "claude_opus_proxy", which would yield "400 Unknown Model".
-            # Refuse anything else so callers don't silently run against a
-            # different model than they configured.
-            cli_model_codes = {"sonnet", "opus", "haiku"}
-            if model_name in cli_model_codes or (
-                model_name and model_name.startswith("claude-")
-            ):
-                model = model_name
-            else:
-                return {
-                    "success": False,
-                    "error": (
-                        f"Agent translator (claude CLI) needs a "
-                        f"sonnet/opus/haiku code or a claude-* model ID; "
-                        f"got {model_name!r}. Pass a valid code at the call "
-                        f"site instead of relying on a fallback."
-                    ),
-                }
-            cmd = [
-                "claude",
-                "--print",
-                "--dangerously-skip-permissions",
-                "--model", model,
-                "--output-format", "json",
-                "Read CLAUDE.md and complete the invariant translation task.",
-            ]
-
-        try:
-            process = await asyncio.create_subprocess_exec(
-                *cmd,
-                cwd=workspace_path,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
-            )
-
-            try:
-                stdout, stderr = await asyncio.wait_for(
-                    process.communicate(),
-                    timeout=self.timeout,
-                )
-            except asyncio.TimeoutError:
-                process.kill()
-                await process.wait()
-                return {"success": False, "error": f"Timeout after {self.timeout} seconds"}
-
-            out = stdout.decode("utf-8", errors="replace")
-            err = stderr.decode("utf-8", errors="replace")
-
-            return {
-                "success": process.returncode == 0,
-                "stdout": out,
-                "stderr": err,
-                "exit_code": process.returncode,
-                # `claude --output-format json` writes its error payload to
-                # stdout and leaves stderr empty; fall back to stdout so the
-                # failure reason is not lost.
-                "error": (err or out) if process.returncode != 0 else None,
-            }
-
-        except FileNotFoundError:
-            if agent_cli == "codex":
-                return {"success": False, "error": "Codex CLI not found"}
-            return {"success": False, "error": "Claude Code CLI not found"}
-        except Exception as e:
-            return {"success": False, "error": str(e)}
 
     def _parse_agent_output(self, output_content: str, templates: List[InvariantTemplate]) -> Dict[str, str]:
         """Parse the agent's JSON output."""

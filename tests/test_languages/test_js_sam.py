@@ -246,3 +246,33 @@ class TestTranslationParsing:
         )
         assert translated == {}
         assert error
+
+    def test_agent_translator_routes_to_shared_core(self):
+        # claude-code / codex route through the shared agent_translation core
+        # instead of the direct API call. Mock the core (no CLI required).
+        from unittest import mock
+
+        backend = JsSamBackend()
+        captured = {}
+
+        def fake_run(**kwargs):
+            captured.update(kwargs)
+            return (
+                True,
+                '{"invariants":[{"name":"MutualExclusion","predicate":"(s)=>true"}]}',
+                None,
+            )
+
+        with mock.patch(
+            "tla_eval.evaluation.semantics.agent_translation.run_agent_translation",
+            side_effect=fake_run,
+        ):
+            translated, error = backend.translate_invariants(
+                self._templates(), "module.exports = {}", "spin",
+                translator="claude-code",
+            )
+        assert error is None
+        assert translated == {"MutualExclusion": "(s)=>true"}
+        # It fed the generated spec to the agent and picked the claude CLI code.
+        assert "specification.js" in captured["extra_files"]
+        assert captured["model_name"] == "sonnet"
