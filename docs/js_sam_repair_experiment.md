@@ -22,7 +22,7 @@ For each model, one repair round:
 4. Confirm the repaired spec still compiles (Phase 1), then re-score Phase 3.
 
 Single round, direct call, same 28-window corpus for baseline and repaired.
-Driver: `scripts/experiments/repair_phase3.py`.
+Driver: `scripts/repair_phase3.py`.
 
 ## Results
 
