@@ -1,0 +1,61 @@
+Convert the following Asterinas OS spinlock source code into a plain JavaScript
+transition function — NO libraries, NO frameworks, NO SAM pattern. Just a pure
+function over the observable state. This is compared directly against a TLA+
+relation of the same lock, so it is constrained to the same two-variable
+observable state.
+
+## Source (the real implementation)
+
+Source from {file_path}:
+```rust
+{source_code}
+```
+
+## Observable state (EXACTLY two keys)
+
+The state is a plain object with EXACTLY these two keys:
+
+  - `lockHeld`   — boolean: true iff the lock is currently held
+  - `lockHolder` — the holding thread id (0 or 1), or null if free
+
+Do NOT add any other keys (no threadStatus, no callType map, no counters).
+
+## Module contract (hard requirements)
+
+Your specification is a CommonJS module evaluated by an automated harness. It
+MUST export exactly:
+
+    module.exports = { init, next };
+
+  - `init()` returns the initial state: `{ lockHeld: false, lockHolder: null }`.
+  - `next(state, action, data)` is a PURE function returning the NEW state
+    `{ lockHeld, lockHolder }` after applying ONE action:
+      * `state`  — the current `{ lockHeld, lockHolder }`.
+      * `action` — the string `'AcquireLock'` or `'ReleaseLock'`.
+      * `data`   — `{ thread: 0|1, callType: 'lock'|'try' }` for AcquireLock;
+                   `{ thread: 0|1 }` for ReleaseLock.
+    Do NOT mutate `state`; return a new object. No I/O, timers, randomness, or
+    external state. No SAM library, no classes required — a single function.
+
+## Observable single-step semantics (what a correct model MUST reproduce)
+
+The harness pins the pre-state, calls `next(pre, action, data)` once, and checks
+the returned `{ lockHeld, lockHolder }` equals the trace post-state. Your `next`
+MUST produce exactly these transitions:
+
+  - AcquireLock, data { thread, callType }:
+      * lock free (state.lockHeld === false): thread acquires it →
+        { lockHeld: true, lockHolder: thread }.
+      * lock held (state.lockHeld === true): the attempt does NOT change ownership
+        → return the same { lockHeld, lockHolder }. This holds for BOTH callType
+        'lock' and 'try': a blocking lock() spins without changing the observable
+        lock, and a failing try leaves it unchanged.
+  - ReleaseLock, data { thread }:
+      * thread holds the lock (state.lockHolder === thread) →
+        { lockHeld: false, lockHolder: null }.
+      * otherwise: no observable change (return the same state).
+
+## Output
+
+Output EXACTLY ONE fenced ```javascript code block containing the module, and
+nothing else (no prose).

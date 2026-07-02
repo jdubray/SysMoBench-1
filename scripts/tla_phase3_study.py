@@ -34,6 +34,7 @@ from tla_eval.tasks.loader import get_task_loader
 from tla_eval.languages import get as get_backend
 from tla_eval.evaluation.semantics.trace_loader import load_trace_windows
 from tla_direct_tv import direct_tv
+from plain_js_tv import plain_js_tv
 
 WINDOWS = load_trace_windows("spin")
 NW = len(WINDOWS)
@@ -77,6 +78,13 @@ def score_tla(spec_text: str):
         return [status for _name, status in direct_tv(sp, WINDOWS, timeout=60)]
 
 
+def score_pjs(spec_text: str):
+    with tempfile.TemporaryDirectory() as d:
+        sp = Path(d) / "spin.js"
+        sp.write_text(spec_text, encoding="utf-8")
+        return plain_js_tv(sp, WINDOWS, timeout=120)
+
+
 def mcnemar(js, tla):
     """(b, c, note) over paired unconditional outcomes (pass vs not-pass)."""
     b = sum(1 for j, t in zip(js, tla) if j == "pass" and t != "pass")  # JS only
@@ -96,16 +104,20 @@ def main():
     src = task.source_code
     js_prompt = _fill((PROJECT_ROOT / "tla_eval/tasks/spin/prompts/js-sam/direct_call.txt").read_text(encoding="utf-8"), src)
     jsc_prompt = _fill((PROJECT_ROOT / "tla_eval/tasks/spin/prompts/js-sam/direct_call_constrained.txt").read_text(encoding="utf-8"), src)
+    pjs_prompt = _fill((PROJECT_ROOT / "tla_eval/tasks/spin/prompts/plain-js/direct_call.txt").read_text(encoding="utf-8"), src)
     tla_prompt = _fill((PROJECT_ROOT / "tla_eval/tasks/spin/prompts/direct_call_constrained.txt").read_text(encoding="utf-8"), src)
 
     RESULTS_FILE.parent.mkdir(parents=True, exist_ok=True)
     results = json.loads(RESULTS_FILE.read_text(encoding="utf-8")) if RESULTS_FILE.exists() else {}
 
     # js  = deployed JS-SAM prompt (does NOT state the single-step semantics)
-    # jsc = constrained JS-SAM prompt (same semantics block as the TLA arm) -> the fair pair
+    # jsc = constrained JS-SAM prompt (same semantics block as the TLA arm)
+    # pjs = plain-JS next(state,action,data) — no SAM, two keys — isomorphic to the TLA relation
     # tla = constrained TLA+ prompt
-    arms = [("js", js_prompt, score_js, lambda t: JSB.extract_artifacts(t).spec),
-            ("jsc", jsc_prompt, score_js, lambda t: JSB.extract_artifacts(t).spec),
+    _js_extract = lambda t: JSB.extract_artifacts(t).spec
+    arms = [("js", js_prompt, score_js, _js_extract),
+            ("jsc", jsc_prompt, score_js, _js_extract),
+            ("pjs", pjs_prompt, score_pjs, _js_extract),
             ("tla", tla_prompt, score_tla, _extract_tla)]
 
     for model in args.models:
@@ -138,18 +150,17 @@ def main():
         return acc
 
     print("\n===== PASS RATES (mean over N generations) =====")
-    print(f"{'model':8s} {'JS(deployed)':>13s} {'JS(constr)':>11s} {'TLA(constr)':>12s}")
+    print(f"{'model':8s} {'JS(depl)':>9s} {'JS(constr)':>11s} {'plainJS':>8s} {'TLA(constr)':>12s}")
     for model in args.models:
         row = []
-        for lang in ("js", "jsc", "tla"):
-            g = gather(model, lang)
-            flat = [x for s in g for x in s]
+        for lang in ("js", "jsc", "pjs", "tla"):
+            flat = [x for s in gather(model, lang) for x in s]
             row.append(f"{uncond(flat):.1f}%" if flat else "n/a")
-        print(f"{model:8s} {row[0]:>13s} {row[1]:>11s} {row[2]:>12s}")
+        print(f"{model:8s} {row[0]:>9s} {row[1]:>11s} {row[2]:>8s} {row[3]:>12s}")
 
-    print("\n===== PAIRED McNemar over windows (b=first-only pass, c=second-only pass) =====")
-    print("The fair comparison is JS(constr) vs TLA(constr) — identical prompt content, language differs.")
-    print(f"{'model':8s} {'JS(depl) vs TLA':>22s} {'JS(constr) vs TLA':>24s}")
+    print("\n===== PAIRED McNemar over windows (b=first-only pass, c=TLA-only pass) =====")
+    print("JS(constr) vs TLA isolates the language; plainJS vs TLA isolates SAM's machinery.")
+    print(f"{'model':8s} {'JS(constr) vs TLA':>20s} {'plainJS vs TLA':>18s}")
     for model in args.models:
         def flat(lang):
             return [x for s in gather(model, lang) for x in s]
@@ -160,8 +171,8 @@ def main():
             bb, cc, st = mcnemar(xa, xb)
             sig = "*" if st > 3.84 else " "
             return f"b={bb} c={cc} chi2={st:.1f}{sig}"
-        print(f"{model:8s} {cell('js','tla'):>22s} {cell('jsc','tla'):>24s}")
-    print("\n(* => paired difference significant at p<0.05, df=1. b=JS-only pass, c=TLA-only pass.)")
+        print(f"{model:8s} {cell('jsc','tla'):>20s} {cell('pjs','tla'):>18s}")
+    print("\n(* => paired difference significant at p<0.05, df=1. b=first-only pass, c=TLA-only pass.)")
 
 
 if __name__ == "__main__":
