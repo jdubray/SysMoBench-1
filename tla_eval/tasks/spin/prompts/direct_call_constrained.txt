@@ -4,6 +4,10 @@ against a JavaScript (SAM) spec of the same lock, so it is constrained to the
 same observable-state contract: express the lock over the identical variables
 the trace uses, so trace states map onto spec states with no interpretation.
 
+## Source (the real implementation)
+
+{source_code}
+
 ## Observable-state contract (MANDATORY — the harness pins these exactly)
 
 Your module MUST be named `spin` and its observable state MUST be EXACTLY these

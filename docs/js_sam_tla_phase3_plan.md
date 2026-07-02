@@ -1,6 +1,6 @@
 # Fair Phase-3: JS-SAM vs. TLA+ over the same observable-state contract
 
-**Status:** blockers built + validated (2026-07-02). Full N=5 run pending.
+**Status:** complete (2026-07-02). Results: docs/js_sam_tla_phase3_results.md.
 
 The earlier JS-SAM-vs-TLA+ comparison (`docs/js_sam_vs_tla_comparison.md`) could
 not compare Phase 3 fairly: JS-SAM uses a mechanical direct replay, while TLA+
