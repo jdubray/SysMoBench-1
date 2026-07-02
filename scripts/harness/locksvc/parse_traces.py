@@ -114,8 +114,8 @@ def main():
     out_dir.mkdir(parents=True, exist_ok=True)
     out_path = out_dir / "trace_01.ndjson"
 
-    with out_path.open("w") as outf:
-        outf.write("# locksvc PGo trace (PGo-native → SysMoBench NDJSON)\n")
+    with out_path.open("w", encoding="utf-8") as outf:
+        outf.write("# locksvc PGo trace (PGo-native -> SysMoBench NDJSON)\n")
         outf.write("# Spec actions: ClientLockRequest, ServerGrantLock, ClientCriticalSection, ClientUnlockRequest\n")
         for line in src.read_text().splitlines():
             line = line.strip()

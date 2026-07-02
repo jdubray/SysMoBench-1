@@ -76,6 +76,35 @@ study validated Phase 3 on model-generated specs — into a single coherent arti
 set: the saved specs (`output/lean_specs/`) and per-spec per-phase results
 (`output/lean_full_pipeline.json`) are the same 20 files across all phases.
 
+### Second task: locksvc (richer state — de-tinies and de-converges)
+
+`spin`'s observable state is tiny (3 reachable states, two scalar keys), so two
+worries remained: the clean 100% might be an artifact of a trivial state space,
+and models might all converge on one solution. A second, structurally different
+task settles both. **locksvc** is PGo's centralised lock service (one server, N
+clients); its observable state is `{ holder, waiters }` — a lock holder plus a
+**FIFO wait queue** (an unbounded list, not a scalar), with four actions
+(`ClientLockRequest`, `ServerGrantLock`, `ClientCriticalSection`,
+`ClientUnlockRequest`) and FCFS grant semantics. Traces are captured from the real
+Go implementation with a distsys trace recorder (`scripts/harness/locksvc/`), then
+folded to observable `(pre, action, post)` windows (60 windows over 5 runs).
+
+Same study, `--task locksvc`:
+
+| Model | loadable | Phase 2 clean | Phase 3 = 60/60 | Phase 4 hold | **all phases** |
+|---|---|---|---|---|---|
+| Opus 4.8 | 5/5 | 5/5 | 5/5 | 5/5 | **5/5** |
+| Fable 5 | 5/5 | 5/5 | 5/5 | 5/5 | **5/5** |
+| Sonnet 4.6 | 5/5 | 5/5 | 5/5 | 5/5 | **5/5** |
+| Haiku 4.5 | 5/5 | 5/5 | 5/5 | 5/5 | **5/5** |
+
+**20/20 again**, on a task whose bounded exploration reaches **31 states** (vs
+spin's 3) and whose reference model must manage a queue. And the solutions
+**de-converge**: 11 distinct specs of 20 (spin: 9/20), spread 36–48 lines with
+per-model structural clustering — genuinely different correct implementations of a
+non-trivial queue-based lock, all passing. Artifacts: `output/lean_specs_locksvc/`,
+`output/lean_full_pipeline_locksvc.json`, traces `data/sys_traces/locksvc/`.
+
 ## Integration options for SysMoBench
 
 1. **A lean backend / spec shape (recommended for Phase-3 fidelity).** Offer the
@@ -99,18 +128,27 @@ set: the saved specs (`output/lean_specs/`) and per-spec per-phase results
   semantics* — the leaner the contract, the less it exercises "can the model use
   the pattern," which is part of the original hypothesis. Options 1 and 2 keep JS
   familiarity while removing the fidelity tax; option 2 also keeps the pattern.
-- The clean 100% here is for a tiny observable state (`spin`). On richer control
-  state the `next` core itself becomes non-trivial, and the lean-vs-SAM gap may
-  narrow; the prototype should be re-run on a second task (`ringbuffer`/`locksvc`)
-  before generalizing.
+- The tiny-state and convergence worries are now controlled by the second task:
+  `locksvc` reaches 31 states with a real wait queue and still gives 20/20, with
+  11/20 distinct solutions. Two tasks is still a small base — a distributed task
+  with genuinely concurrent holders (multiple `hasLock` clients, not just the
+  single-holder projection here), or a data structure like `ringbuffer` whose
+  `next` core is arithmetic-heavy, would further test where (if anywhere) the lean
+  contract's advantage narrows. The plumbing is now task-agnostic
+  (`scripts/lean_task_config.py`), so adding a third task is prompt + traces only.
 
 ## Files
 
-- Contract + reference: `tools/plain-js/reference_spin.js`, prompt
-  `tla_eval/tasks/spin/prompts/plain-js/direct_call.txt`.
-- Runners: `tools/plain-js/tv.mjs` (Phase 3), `tools/plain-js/explore.mjs`
-  (Phases 2/4); Python: `scripts/plain_js_tv.py`.
-- Demo: `scripts/lean_demo.py` (reference spec, all phases).
-- End-to-end study: `scripts/lean_full_pipeline_study.py` (N generations/model
-  through all phases). Artifacts: `output/lean_specs/<model>_<gen>.js`,
-  `output/lean_full_pipeline.json`.
+- Contract + references: `tools/plain-js/reference_spin.js`,
+  `tools/plain-js/reference_locksvc.js`; prompts
+  `tla_eval/tasks/{spin,locksvc}/prompts/plain-js/direct_call.txt`.
+- Per-task config (action domain + invariants + reference): `scripts/lean_task_config.py`.
+- Runners: `tools/plain-js/tv.mjs` (Phase 3, task-agnostic projection rule),
+  `tools/plain-js/explore.mjs` (Phases 2/4); Python: `scripts/plain_js_tv.py`.
+- Demo: `scripts/lean_demo.py --task {spin,locksvc}` (reference spec, all phases).
+- End-to-end study: `scripts/lean_full_pipeline_study.py --task {spin,locksvc}`
+  (N generations/model through all phases). Artifacts:
+  `output/lean_specs[_<task>]/<model>_<gen>.js`, `output/lean_full_pipeline[_<task>].json`.
+- locksvc trace capture: `scripts/harness/locksvc/` — `run.sh` (PGo `go test` with
+  a trace recorder) → `parse_traces.py` (PGo-native events) → `build_windows.py`
+  (fold to `{holder, waiters}` observable windows). Corpus: `data/sys_traces/locksvc/`.

@@ -1,0 +1,79 @@
+Convert the following PGo locksvc lock-service source into a plain JavaScript
+transition function — NO libraries, NO frameworks, NO SAM pattern. Just a pure
+function over the observable state. This is compared directly against a TLA+
+relation of the same lock service, so it is constrained to the same
+observable state.
+
+## Source (the real implementation)
+
+Source from {file_path}:
+```go
+{source_code}
+```
+
+## The system
+
+A centralized lock service: one server and N clients. Each client requests the
+lock, waits, enters its critical section when granted, then unlocks. The server
+serves requests first-come-first-served (FCFS): it keeps a FIFO queue of
+requesters; the client at the head of the queue holds the lock; on unlock the
+lock passes to the next client in line.
+
+## Observable state (EXACTLY two keys)
+
+The state is a plain object with EXACTLY these two keys:
+
+  - `holder`  — the client id currently holding the lock, or `null` if the lock
+                is free
+  - `waiters` — an array of client ids that have requested the lock and are
+                waiting for it, in FIFO order (the head is served next)
+
+Do NOT add any other keys (no per-client status map, no message queues, no
+network state, no counters).
+
+## Module contract (hard requirements)
+
+Your specification is a CommonJS module evaluated by an automated harness. It
+MUST export exactly:
+
+    module.exports = { init, next };
+
+  - `init()` returns the initial state: `{ holder: null, waiters: [] }`.
+  - `next(state, action, data)` is a PURE function returning the NEW state
+    `{ holder, waiters }` after applying ONE action:
+      * `state`  — the current `{ holder, waiters }`.
+      * `action` — one of the strings `'ClientLockRequest'`, `'ServerGrantLock'`,
+                   `'ClientCriticalSection'`, `'ClientUnlockRequest'`.
+      * `data`   — `{ client: <id> }`, the client the action concerns.
+    Do NOT mutate `state` (copy `waiters` before changing it); return a new
+    object. No I/O, timers, randomness, or external state. No library, no classes
+    required — a single function.
+
+## Observable single-step semantics (what a correct model MUST reproduce)
+
+The harness pins the pre-state, calls `next(pre, action, data)` once, and checks
+the returned `{ holder, waiters }` equals the trace post-state. Your `next` MUST
+produce exactly these transitions (FCFS — grants go only to the head of the
+queue, and only when the lock is free):
+
+  - `ClientLockRequest`, data `{ client: c }`:
+      * c joins the back of the queue: append c to `waiters`. Guard against a
+        client that is already the holder or already queued — do NOT add a
+        duplicate. `holder` is unchanged.
+  - `ServerGrantLock`, data `{ client: c }`:
+      * if the lock is free (`holder === null`) AND c is at the head of the queue
+        (`waiters[0] === c`): grant it — `holder := c` and remove the head from
+        `waiters`.
+      * otherwise: no change (a grant can only go to the head of a free lock).
+  - `ClientCriticalSection`, data `{ client: c }`:
+      * c is using the lock it already holds. The observable state does NOT
+        change — return `{ holder, waiters }` unchanged.
+  - `ClientUnlockRequest`, data `{ client: c }`:
+      * if c is the holder (`holder === c`): release it — `holder := null`.
+        `waiters` is unchanged (the next grant is a separate ServerGrantLock).
+      * otherwise: no change.
+
+## Output
+
+Output EXACTLY ONE fenced ```javascript code block containing the module, and
+nothing else (no prose).

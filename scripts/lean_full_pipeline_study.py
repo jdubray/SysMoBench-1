@@ -38,29 +38,21 @@ from tla_eval.tasks.loader import get_task_loader
 from tla_eval.languages import get as get_backend
 from tla_eval.evaluation.semantics.trace_loader import load_trace_windows
 from plain_js_tv import plain_js_tv, plain_js_explore
-from lean_demo import ACTIONS, INVARIANTS  # shared action domain + spinlock invariants
+from lean_task_config import get as get_task_cfg
 
-WINDOWS = load_trace_windows("spin")
-NW = len(WINDOWS)
 JSB = get_backend("js-sam")
-SPECS_DIR = PROJECT_ROOT / "output" / "lean_specs"
-RESULTS_FILE = PROJECT_ROOT / "output" / "lean_full_pipeline.json"
 
 
-def _fill(tpl: str, src: str) -> str:
-    return tpl.replace("{source_code}", src).replace("{file_path}", "ostd/src/sync/spin.rs")
-
-
-def evaluate(spec_path: Path) -> dict:
+def evaluate(spec_path: Path, cfg: dict, windows, nw: int) -> dict:
     """Run Phases 2/4 (explore) and Phase 3 (tv) on one saved lean spec."""
-    rep = plain_js_explore(spec_path, ACTIONS, INVARIANTS, depth_max=6)
+    rep = plain_js_explore(spec_path, cfg["actions"], cfg["invariants"], depth_max=8)
     loadable = bool(rep.get("ok"))
     p2_ok = loadable and rep.get("classification") is None
     viol = rep.get("invariantViolations") or {}
     p4_ok = loadable and not viol
-    statuses = plain_js_tv(spec_path, WINDOWS)
+    statuses = plain_js_tv(spec_path, windows)
     p3_pass = statuses.count("pass")
-    p3_ok = p3_pass == NW
+    p3_ok = p3_pass == nw
     return {
         "loadable": loadable,
         "p2_ok": p2_ok,
@@ -69,7 +61,7 @@ def evaluate(spec_path: Path) -> dict:
         "p4_ok": p4_ok,
         "p4_violations": list(viol.keys()),
         "p3_pass": p3_pass,
-        "p3_total": NW,
+        "p3_total": nw,
         "p3_ok": p3_ok,
         "all_phases": bool(p2_ok and p4_ok and p3_ok),
         "explore_error": None if loadable else rep.get("error"),
@@ -78,18 +70,26 @@ def evaluate(spec_path: Path) -> dict:
 
 def main():
     ap = argparse.ArgumentParser()
+    ap.add_argument("--task", default="spin")
     ap.add_argument("--n", type=int, default=5)
     ap.add_argument("--models", nargs="+", default=["claude", "fable", "sonnet", "haiku"])
     args = ap.parse_args()
 
-    SPECS_DIR.mkdir(parents=True, exist_ok=True)
-    RESULTS_FILE.parent.mkdir(parents=True, exist_ok=True)
-    results = json.loads(RESULTS_FILE.read_text(encoding="utf-8")) if RESULTS_FILE.exists() else {}
+    cfg = get_task_cfg(args.task)
+    windows = load_trace_windows(args.task)
+    nw = len(windows)
+    specs_dir = PROJECT_ROOT / "output" / f"lean_specs_{args.task}"
+    results_file = PROJECT_ROOT / "output" / f"lean_full_pipeline_{args.task}.json"
+    specs_dir.mkdir(parents=True, exist_ok=True)
+    results_file.parent.mkdir(parents=True, exist_ok=True)
+    results = json.loads(results_file.read_text(encoding="utf-8")) if results_file.exists() else {}
 
-    task = get_task_loader().load_task("spin")
-    pjs_prompt = _fill(
-        (PROJECT_ROOT / "tla_eval/tasks/spin/prompts/plain-js/direct_call.txt").read_text(encoding="utf-8"),
-        task.source_code,
+    task = get_task_loader().load_task(args.task)
+    pjs_prompt = (
+        (PROJECT_ROOT / f"tla_eval/tasks/{args.task}/prompts/plain-js/direct_call.txt")
+        .read_text(encoding="utf-8")
+        .replace("{source_code}", task.source_code)
+        .replace("{file_path}", cfg["source_file"])
     )
 
     for model in args.models:
@@ -97,15 +97,16 @@ def main():
             key = f"{model}|{gen}"
             if key in results:
                 continue
-            spec_path = SPECS_DIR / f"{model}_{gen}.js"
+            spec_path = specs_dir / f"{model}_{gen}.js"
             resp = get_configured_model(model).generate_direct(pjs_prompt, GenerationConfig(top_p=None))
             if not resp.success:
                 results[key] = {"error": resp.error_message, "all_phases": False}
             else:
                 spec_text = JSB.extract_artifacts(resp.generated_text).spec
                 spec_path.write_text(spec_text, encoding="utf-8")
-                results[key] = {"spec_file": str(spec_path.relative_to(PROJECT_ROOT)), **evaluate(spec_path)}
-            RESULTS_FILE.write_text(json.dumps(results, indent=1), encoding="utf-8")
+                results[key] = {"spec_file": str(spec_path.relative_to(PROJECT_ROOT)),
+                                **evaluate(spec_path, cfg, windows, nw)}
+            results_file.write_text(json.dumps(results, indent=1), encoding="utf-8")
             r = results[key]
             print(f"{key}: load={r.get('loadable')} P2={r.get('p2_ok')} "
                   f"P3={r.get('p3_pass')}/{r.get('p3_total')} P4={r.get('p4_ok')} "
@@ -113,8 +114,8 @@ def main():
                   flush=True)
 
     # ---- Aggregate ----
-    print("\n===== LEAN SPECS THROUGH ALL PHASES (N generations per model) =====")
-    print(f"{'model':8s} {'loadable':>9s} {'P2 clean':>9s} {'P3=28/28':>9s} {'P4 hold':>8s} {'ALL PASS':>9s}")
+    print(f"\n===== LEAN SPECS THROUGH ALL PHASES — task={args.task} (N per model) =====")
+    print(f"{'model':8s} {'loadable':>9s} {'P2 clean':>9s} {f'P3={nw}/{nw}':>9s} {'P4 hold':>8s} {'ALL PASS':>9s}")
     grand_all = 0
     grand_n = 0
     for model in args.models:
@@ -129,7 +130,7 @@ def main():
         grand_n += n
         print(f"{model:8s} {load:>4d}/{n:<4d} {p2:>4d}/{n:<4d} {p3:>4d}/{n:<4d} {p4:>3d}/{n:<4d} {alle:>4d}/{n:<4d}")
     print(f"\nAll four phases, all models: {grand_all}/{grand_n} model-generated lean specs pass every phase.")
-    print(f"Saved specs: {SPECS_DIR.relative_to(PROJECT_ROOT)}/  ·  raw results: {RESULTS_FILE.relative_to(PROJECT_ROOT)}")
+    print(f"Saved specs: {specs_dir.relative_to(PROJECT_ROOT)}/  ·  raw results: {results_file.relative_to(PROJECT_ROOT)}")
 
 
 if __name__ == "__main__":
