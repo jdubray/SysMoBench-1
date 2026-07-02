@@ -35,6 +35,23 @@ models:
     # prior run's cap and stay within non-streaming timeout limits.
     max_tokens: 64000
 
+  # Sibling Claude tiers for cross-model comparison (same ANTHROPIC_API_KEY).
+  # Sonnet 4.6 rejects temperature AND top_p together, so set only temperature;
+  # both tiers still accept sampling params (unlike Opus 4.7+), so they are kept.
+  sonnet:
+    provider: "anthropic"
+    model_name: "claude-sonnet-4-6"
+    api_key_env: "ANTHROPIC_API_KEY"
+    temperature: 0.1
+    max_tokens: 64000
+
+  haiku:
+    provider: "anthropic"
+    model_name: "claude-haiku-4-5"
+    api_key_env: "ANTHROPIC_API_KEY"
+    temperature: 0.1
+    max_tokens: 64000
+
   deepseek_tencent:
     provider: "deepseek"
     url: "https://api.lkeap.cloud.tencent.com/v1"
