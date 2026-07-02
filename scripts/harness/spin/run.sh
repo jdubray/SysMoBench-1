@@ -45,20 +45,30 @@ if [ ! -e "$SRC/ostd/src/sync/spin_trace.rs" ]; then
   tr -d '\r' < "$ADD_PATCH" | git -C "$SRC" apply --whitespace=nowarn
 fi
 
-# 3. Build + run under QEMU, capturing serial output. Source is read-only; the
-# build happens on the ext4 volume `spin-work`; cargo cache on `spin-cargo`.
-echo "[run.sh] building + running test_spin_2thread under QEMU (see $LOG)" >&2
-docker run --rm --privileged \
-  -v "$SRC:/src:ro" \
-  -v "$SCRIPT_DIR:/harness:ro" \
-  -v "spin-work:/build" \
-  -v "spin-cargo:/root/.cargo" \
-  "$IMAGE" bash /harness/build_and_test.sh > "$LOG" 2>&1 || {
-    echo "[run.sh] docker run failed; tail of $LOG:" >&2
-    tail -40 "$LOG" >&2
-    exit 1
-  }
-
-# 4. Parse serial JSON -> NDJSON windows.
-python3 "$SCRIPT_DIR/parse_traces.py" "$LOG" "$TRACES_OUT"
-echo "[run.sh] traces written to $TRACES_OUT" >&2
+# 3-4. For each scenario: build + run the ktest under QEMU (source read-only,
+# build on the ext4 `spin-work` volume, cargo cache on `spin-cargo`), capture
+# serial output, and parse it into an NDJSON trace file. trace_loader.py loads
+# every *.ndjson under data/sys_traces/spin, so more scenarios = broader Phase-3
+# coverage. Format: "<ktest name>:<output file>".
+SCENARIOS=(
+  "test_spin_2thread:spin_2thread.ndjson"
+  "test_spin_seq:spin_seq.ndjson"
+)
+TRACES_DIR="$(dirname "$TRACES_OUT")"
+mkdir -p "$TRACES_DIR"
+for entry in "${SCENARIOS[@]}"; do
+  ktest="${entry%%:*}"; outfile="${entry##*:}"
+  echo "[run.sh] building + running $ktest under QEMU (see $LOG)" >&2
+  docker run --rm --privileged \
+    -v "$SRC:/src:ro" \
+    -v "$SCRIPT_DIR:/harness:ro" \
+    -v "spin-work:/build" \
+    -v "spin-cargo:/root/.cargo" \
+    "$IMAGE" bash /harness/build_and_test.sh "$ktest" > "$LOG" 2>&1 || {
+      echo "[run.sh] docker run failed for $ktest; tail of $LOG:" >&2
+      tail -40 "$LOG" >&2
+      exit 1
+    }
+  python3 "$SCRIPT_DIR/parse_traces.py" "$LOG" "$TRACES_DIR/$outfile"
+done
+echo "[run.sh] traces written to $TRACES_DIR" >&2

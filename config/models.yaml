@@ -35,6 +35,35 @@ models:
     # prior run's cap and stay within non-streaming timeout limits.
     max_tokens: 64000
 
+  # Sibling Claude tiers for cross-model comparison (same ANTHROPIC_API_KEY).
+  # Sonnet 4.6 rejects temperature AND top_p together, so set only temperature;
+  # both tiers still accept sampling params (unlike Opus 4.7+), so they are kept.
+  sonnet:
+    provider: "anthropic"
+    model_name: "claude-sonnet-4-6"
+    api_key_env: "ANTHROPIC_API_KEY"
+    temperature: 0.1
+    max_tokens: 64000
+
+  haiku:
+    provider: "anthropic"
+    model_name: "claude-haiku-4-5"
+    api_key_env: "ANTHROPIC_API_KEY"
+    temperature: 0.1
+    max_tokens: 64000
+
+  # Claude Fable 5 — Anthropic's most capable model. Sampling params
+  # (temperature/top_p/top_k) are removed (dropped by the adapter's
+  # _should_omit_sampling_params) and thinking is always on (no thinking config
+  # is sent). 128K max output; kept at 64000 for non-streaming. Fable reasons
+  # heavily per request, so allow a long timeout.
+  fable:
+    provider: "anthropic"
+    model_name: "claude-fable-5"
+    api_key_env: "ANTHROPIC_API_KEY"
+    max_tokens: 64000
+    timeout: 1800
+
   deepseek_tencent:
     provider: "deepseek"
     url: "https://api.lkeap.cloud.tencent.com/v1"

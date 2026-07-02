@@ -244,6 +244,56 @@ def _format_js_templates_for_prompt(templates: List[InvariantTemplate]) -> str:
     return "\n".join(out)
 
 
+def _build_js_sam_agent_instructions(templates: List[InvariantTemplate]) -> str:
+    """Agent (CLAUDE.md / CODEX.md) instructions for translating spinlock
+    invariants into JavaScript predicates against a generated SAM spec."""
+    names = ", ".join(t.name for t in templates)
+    return f'''# Invariant Translation Task (JS-SAM)
+
+## Your role
+
+You translate generic invariant templates into JavaScript predicates that match
+a specific SAM-pattern specification (see https://sam.js.org).
+
+## Input files
+
+1. `specification.js` — the generated SAM module. Read its `getState()` to learn
+   the exact state shape your predicates must be written against.
+2. `templates.md` — the invariant templates to translate (name, type,
+   description, and an *illustrative* JavaScript example to adapt).
+
+## Task
+
+For each template, write a JavaScript **safety** predicate of the form
+`(state) => boolean` that reads the fields the generated spec's `getState()`
+actually produces (do not assume field names from the illustrative example).
+The predicate must return `true` when the invariant holds for `state`.
+
+## Rules
+
+1. Do not modify `specification.js`.
+2. Use only fields that the spec's `getState()` returns.
+3. Each predicate is a single self-contained arrow function; no external state.
+4. Output MUST be valid JSON.
+
+## Invariants to translate
+
+{names}
+
+## Output
+
+Write `./output/invariants.json` with exactly this shape:
+
+```json
+{{
+  "invariants": [
+    {{ "name": "InvariantName", "predicate": "(state) => /* boolean expr */" }}
+  ]
+}}
+```
+'''
+
+
 def _parse_js_sam_translations(
     generated_text: str, templates: List[InvariantTemplate]
 ) -> Dict[str, str]:
@@ -476,13 +526,15 @@ class JsSamBackend(LanguageBackend):
         translator: str = "claude-code",
         agent_timeout: Optional[int] = None,
     ) -> Tuple[Dict[str, str], Optional[str]]:
-        # No agent-translator exists for JS-SAM — same policy as Alloy/PAT,
-        # which remap the generic agent defaults to a direct API call
-        # (spec Open Question 4 tracks sharing real agent infrastructure).
-        if translator in ("claude-code", "codex", "claude"):
-            model_name = "claude"
-        else:
-            model_name = translator
+        # Agent path: claude-code / codex drive an agent CLI to translate the
+        # invariants against the generated spec, reusing the shared core in
+        # evaluation.semantics.agent_translation (the same machinery the TLA+
+        # backend uses). "claude" or an explicit model name uses the direct call.
+        if translator in ("claude-code", "codex"):
+            return self._translate_invariants_via_agent(
+                templates, spec, translator, agent_timeout
+            )
+        model_name = "claude" if translator == "claude" else translator
 
         from ..config import get_configured_model
         from ..models.base import GenerationConfig
@@ -514,6 +566,38 @@ class JsSamBackend(LanguageBackend):
         if not result.success:
             return {}, result.error_message
         return _parse_js_sam_translations(result.generated_text, templates), None
+
+    def _translate_invariants_via_agent(
+        self,
+        templates: List[InvariantTemplate],
+        spec: str,
+        translator: str,
+        agent_timeout: Optional[int],
+    ) -> Tuple[Dict[str, str], Optional[str]]:
+        """Translate invariants with an agent CLI via the shared core.
+
+        Produces JavaScript predicates written against the *generated* spec's
+        own state shape. Output shares the ``{"invariants": [{"name",
+        "predicate"}]}`` format the direct path emits, so the same parser is
+        reused. Requires the claude-code (or codex) CLI to be installed.
+        """
+        from ..evaluation.semantics.agent_translation import run_agent_translation
+
+        # claude-code -> the `claude` CLI (needs a sonnet/opus/haiku code);
+        # codex -> the codex CLI.
+        model_name = "sonnet" if translator == "claude-code" else "codex"
+        success, output_content, error = run_agent_translation(
+            instructions=_build_js_sam_agent_instructions(templates),
+            extra_files={
+                "specification.js": spec,
+                "templates.md": _format_js_templates_for_prompt(templates),
+            },
+            model_name=model_name,
+            timeout=agent_timeout if agent_timeout is not None else 600,
+        )
+        if not success:
+            return {}, error
+        return _parse_js_sam_translations(output_content, templates), None
 
     def check_invariants(
         self,

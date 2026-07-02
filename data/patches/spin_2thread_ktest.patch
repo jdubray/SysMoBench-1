@@ -1,6 +1,6 @@
 --- a/ostd/src/sync/spin_trace_tests.rs
 +++ b/ostd/src/sync/spin_trace_tests.rs
-@@ -98,7 +98,35 @@
+@@ -98,7 +98,73 @@
          crate::early_println!("Expected trace count: 18 events");
          crate::early_println!("- 6 tests × 3 events each (TryAcquire + Success + Release) = 18 total");
      }
@@ -34,10 +34,48 @@
 +        crate::early_println!("=== 2-Thread SpinLock Trace Complete ===");
 +    }
 +
++    /// Longer 2-actor sequence for broader Phase-3 coverage: alternating
++    /// holders, try_lock successes, and repeated failed contention. Still
++    /// single-CPU-safe (contention only ever via non-blocking try_lock).
++    #[ktest]
++    fn test_spin_seq() {
++        crate::early_println!("=== Spin Sequence Trace Start ===");
++        let lock = Arc::new(SpinTrace::<u32, PreemptDisabled>::new(0));
++
++        // Round 1: 0 holds (blocking), 1 fails, 0 releases.
++        let g = lock.lock_with_thread_id(0);
++        assert!(lock.try_lock_with_thread_id(1).is_none());
++        drop(g);
++        // Round 2: 1 holds (blocking), 0 fails, 1 releases.
++        let g = lock.lock_with_thread_id(1);
++        assert!(lock.try_lock_with_thread_id(0).is_none());
++        drop(g);
++        // Round 3: 0 acquires via try from free, releases.
++        let g = lock.try_lock_with_thread_id(0).expect("free");
++        drop(g);
++        // Round 4: 1 acquires via try from free, releases.
++        let g = lock.try_lock_with_thread_id(1).expect("free");
++        drop(g);
++        // Round 5: uncontended back-to-back blocking acquires by each actor.
++        let g = lock.lock_with_thread_id(0);
++        drop(g);
++        let g = lock.lock_with_thread_id(1);
++        drop(g);
++        // Round 6: 0 holds, 1 fails twice, 0 releases, 1 acquires, releases.
++        let g = lock.lock_with_thread_id(0);
++        assert!(lock.try_lock_with_thread_id(1).is_none());
++        assert!(lock.try_lock_with_thread_id(1).is_none());
++        drop(g);
++        let g = lock.lock_with_thread_id(1);
++        drop(g);
++
++        crate::early_println!("=== Spin Sequence Trace Complete ===");
++    }
++
      #[ktest]
      fn test_tla_trace_simple() {
          crate::early_println!("=== TLA+ SpinLock Randomized Trace Test Start ===");
-@@ -212,4 +240,4 @@
+@@ -212,4 +278,4 @@
              _ => unreachable!(),
          }
      }
