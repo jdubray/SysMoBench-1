@@ -118,3 +118,6 @@ docs/leaderboard/**/states/
 
 # Node (JS-SAM helper)
 node_modules/
+
+# Local paper drafts (not tracked)
+paper/
