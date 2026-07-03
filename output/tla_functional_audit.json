@@ -1,0 +1,222 @@
+{
+ "claude|0": {
+  "spec_file": "output\\tla_specs\\claude_0.tla",
+  "existential_pass": 28,
+  "existential_unscoreable": 0,
+  "functional_pass": 28,
+  "over_permissive": 0,
+  "functional_fail": 0,
+  "functional_unscoreable": 0,
+  "max_bf": 1,
+  "windows_bf_gt1": 0
+ },
+ "claude|1": {
+  "spec_file": "output\\tla_specs\\claude_1.tla",
+  "existential_pass": 28,
+  "existential_unscoreable": 0,
+  "functional_pass": 28,
+  "over_permissive": 0,
+  "functional_fail": 0,
+  "functional_unscoreable": 0,
+  "max_bf": 1,
+  "windows_bf_gt1": 0
+ },
+ "claude|2": {
+  "spec_file": "output\\tla_specs\\claude_2.tla",
+  "existential_pass": 28,
+  "existential_unscoreable": 0,
+  "functional_pass": 28,
+  "over_permissive": 0,
+  "functional_fail": 0,
+  "functional_unscoreable": 0,
+  "max_bf": 1,
+  "windows_bf_gt1": 0
+ },
+ "claude|3": {
+  "spec_file": "output\\tla_specs\\claude_3.tla",
+  "existential_pass": 28,
+  "existential_unscoreable": 0,
+  "functional_pass": 28,
+  "over_permissive": 0,
+  "functional_fail": 0,
+  "functional_unscoreable": 0,
+  "max_bf": 1,
+  "windows_bf_gt1": 0
+ },
+ "claude|4": {
+  "spec_file": "output\\tla_specs\\claude_4.tla",
+  "existential_pass": 28,
+  "existential_unscoreable": 0,
+  "functional_pass": 28,
+  "over_permissive": 0,
+  "functional_fail": 0,
+  "functional_unscoreable": 0,
+  "max_bf": 1,
+  "windows_bf_gt1": 0
+ },
+ "fable|0": {
+  "spec_file": "output\\tla_specs\\fable_0.tla",
+  "existential_pass": 28,
+  "existential_unscoreable": 0,
+  "functional_pass": 28,
+  "over_permissive": 0,
+  "functional_fail": 0,
+  "functional_unscoreable": 0,
+  "max_bf": 1,
+  "windows_bf_gt1": 0
+ },
+ "fable|1": {
+  "spec_file": "output\\tla_specs\\fable_1.tla",
+  "existential_pass": 28,
+  "existential_unscoreable": 0,
+  "functional_pass": 28,
+  "over_permissive": 0,
+  "functional_fail": 0,
+  "functional_unscoreable": 0,
+  "max_bf": 1,
+  "windows_bf_gt1": 0
+ },
+ "fable|2": {
+  "spec_file": "output\\tla_specs\\fable_2.tla",
+  "existential_pass": 28,
+  "existential_unscoreable": 0,
+  "functional_pass": 28,
+  "over_permissive": 0,
+  "functional_fail": 0,
+  "functional_unscoreable": 0,
+  "max_bf": 1,
+  "windows_bf_gt1": 0
+ },
+ "fable|3": {
+  "spec_file": "output\\tla_specs\\fable_3.tla",
+  "existential_pass": 28,
+  "existential_unscoreable": 0,
+  "functional_pass": 28,
+  "over_permissive": 0,
+  "functional_fail": 0,
+  "functional_unscoreable": 0,
+  "max_bf": 1,
+  "windows_bf_gt1": 0
+ },
+ "fable|4": {
+  "spec_file": "output\\tla_specs\\fable_4.tla",
+  "existential_pass": 28,
+  "existential_unscoreable": 0,
+  "functional_pass": 28,
+  "over_permissive": 0,
+  "functional_fail": 0,
+  "functional_unscoreable": 0,
+  "max_bf": 1,
+  "windows_bf_gt1": 0
+ },
+ "sonnet|0": {
+  "spec_file": "output\\tla_specs\\sonnet_0.tla",
+  "existential_pass": 28,
+  "existential_unscoreable": 0,
+  "functional_pass": 28,
+  "over_permissive": 0,
+  "functional_fail": 0,
+  "functional_unscoreable": 0,
+  "max_bf": 1,
+  "windows_bf_gt1": 0
+ },
+ "sonnet|1": {
+  "spec_file": "output\\tla_specs\\sonnet_1.tla",
+  "existential_pass": 28,
+  "existential_unscoreable": 0,
+  "functional_pass": 28,
+  "over_permissive": 0,
+  "functional_fail": 0,
+  "functional_unscoreable": 0,
+  "max_bf": 1,
+  "windows_bf_gt1": 0
+ },
+ "sonnet|2": {
+  "spec_file": "output\\tla_specs\\sonnet_2.tla",
+  "existential_pass": 28,
+  "existential_unscoreable": 0,
+  "functional_pass": 28,
+  "over_permissive": 0,
+  "functional_fail": 0,
+  "functional_unscoreable": 0,
+  "max_bf": 1,
+  "windows_bf_gt1": 0
+ },
+ "sonnet|3": {
+  "spec_file": "output\\tla_specs\\sonnet_3.tla",
+  "existential_pass": 28,
+  "existential_unscoreable": 0,
+  "functional_pass": 28,
+  "over_permissive": 0,
+  "functional_fail": 0,
+  "functional_unscoreable": 0,
+  "max_bf": 1,
+  "windows_bf_gt1": 0
+ },
+ "sonnet|4": {
+  "spec_file": "output\\tla_specs\\sonnet_4.tla",
+  "existential_pass": 28,
+  "existential_unscoreable": 0,
+  "functional_pass": 28,
+  "over_permissive": 0,
+  "functional_fail": 0,
+  "functional_unscoreable": 0,
+  "max_bf": 1,
+  "windows_bf_gt1": 0
+ },
+ "haiku|0": {
+  "spec_file": "output\\tla_specs\\haiku_0.tla",
+  "existential_pass": 28,
+  "existential_unscoreable": 0,
+  "functional_pass": 28,
+  "over_permissive": 0,
+  "functional_fail": 0,
+  "functional_unscoreable": 0,
+  "max_bf": 1,
+  "windows_bf_gt1": 0
+ },
+ "haiku|1": {
+  "spec_file": "output\\tla_specs\\haiku_1.tla",
+  "existential_pass": 28,
+  "existential_unscoreable": 0,
+  "functional_pass": 28,
+  "over_permissive": 0,
+  "functional_fail": 0,
+  "functional_unscoreable": 0,
+  "max_bf": 1,
+  "windows_bf_gt1": 0
+ },
+ "haiku|2": {
+  "spec_file": "output\\tla_specs\\haiku_2.tla",
+  "existential_pass": 28,
+  "existential_unscoreable": 0,
+  "functional_pass": 28,
+  "over_permissive": 0,
+  "functional_fail": 0,
+  "functional_unscoreable": 0,
+  "max_bf": 1,
+  "windows_bf_gt1": 0
+ },
+ "haiku|3": {
+  "spec_file": "output\\tla_specs\\haiku_3.tla",
+  "existential_pass": 28,
+  "existential_unscoreable": 0,
+  "functional_pass": 28,
+  "over_permissive": 0,
+  "functional_fail": 0,
+  "functional_unscoreable": 0,
+  "max_bf": 1,
+  "windows_bf_gt1": 0
+ },
+ "haiku|4": {
+  "spec_file": "output\\tla_specs\\haiku_4.tla",
+  "existential_pass": 28,
+  "existential_unscoreable": 0,
+  "functional_pass": 28,
+  "over_permissive": 0,
+  "functional_fail": 0,
+  "functional_unscoreable": 0,
+  "max_bf": 1,
+  "windows_bf_gt1": 0
+ }
+}

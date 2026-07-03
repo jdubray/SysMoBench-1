@@ -33,7 +33,7 @@ from tla_eval.models.base import GenerationConfig
 from tla_eval.tasks.loader import get_task_loader
 from tla_eval.languages import get as get_backend
 from tla_eval.evaluation.semantics.trace_loader import load_trace_windows
-from tla_direct_tv import direct_tv
+from tla_direct_tv import functional_tv
 from plain_js_tv import plain_js_tv
 
 WINDOWS = load_trace_windows("spin")
@@ -72,10 +72,18 @@ def score_js(spec_text: str):
 
 
 def score_tla(spec_text: str):
+    # Functional check (branching factor 1) so the TLA+ arm is scored under the
+    # same strict relation as the JS replay: an over-permissive window (post
+    # reachable but branching factor > 1) counts as a fail, not a pass. See
+    # scripts/tla_functional_audit.py — for the constrained prompt every generated
+    # spec is deterministic (bf=1), so this equals the existential score in practice.
     with tempfile.TemporaryDirectory() as d:
         sp = Path(d) / "spin.tla"
         sp.write_text(spec_text, encoding="utf-8")
-        return [status for _name, status in direct_tv(sp, WINDOWS, timeout=60)]
+        out = []
+        for _name, status, _bf in functional_tv(sp, WINDOWS, timeout=60):
+            out.append("fail" if status == "over_permissive" else status)
+        return out
 
 
 def score_pjs(spec_text: str):

@@ -97,6 +97,69 @@ NEXT TVNext
 INVARIANT NoPost
 """
 
+# No invariant: TLC enumerates the full (tiny) one-step state space so we can read
+# the distinct-state count and derive the branching factor.
+_CFG_COUNT = """CONSTANTS Threads = {0, 1}
+INIT TVInit
+NEXT TVNext
+"""
+
+import re as _re
+
+_DISTINCT_RE = _re.compile(r"([0-9]+) distinct states found")
+
+
+def branching_factor(spec_text: str, action, pre, cp: str, timeout: int = 60):
+    """Distinct observable post-states reachable from `pre` in ONE step of `action`.
+
+    Returns an int (1 for a deterministic action) or None if TLC could not
+    evaluate. Implemented by enumerating the pinned one-step state space: the
+    reachable set is {pre} plus the action's image, and each post carries
+    tv_stepped=TRUE (so a no-op post that equals pre observably is still a
+    distinct state). Hence branching factor == (distinct states) - 1.
+    """
+    name = action["name"] if isinstance(action, dict) else action
+    data = action.get("data", {}) if isinstance(action, dict) else {}
+    with tempfile.TemporaryDirectory(prefix="tla_bf_") as d:
+        dpath = Path(d)
+        (dpath / "spin.tla").write_text(spec_text, encoding="utf-8")
+        (dpath / "spin_TV.tla").write_text(
+            _tv_module(_action_call(name, data), pre, post={"lockHeld": False, "lockHolder": None}),
+            encoding="utf-8")
+        (dpath / "spin_TV.cfg").write_text(_CFG_COUNT, encoding="utf-8")
+        try:
+            proc = subprocess.run(
+                ["java", "-cp", cp, "tlc2.TLC", "-config", "spin_TV.cfg", "spin_TV.tla"],
+                cwd=d, capture_output=True, text=True, timeout=timeout,
+            )
+        except subprocess.TimeoutExpired:
+            return None
+        out = (proc.stdout or "") + (proc.stderr or "")
+        m = _DISTINCT_RE.search(out)
+        if not m:
+            return None
+        return int(m.group(1)) - 1  # subtract the pinned pre-state
+
+
+def functional_replay_window(spec_text, action, pre, post, cp, timeout=60):
+    """Classify a window under a FUNCTIONAL check equivalent to JS next(pre)==post.
+
+    Returns (status, branching_factor):
+      'pass'           post reachable AND branching factor == 1 (image is exactly {post})
+      'over_permissive' post reachable BUT branching factor > 1 (existential-only pass)
+      'fail'           post NOT reachable (wrong single post, or post not in image)
+      'unscoreable'    TLC could not evaluate
+    """
+    existential = replay_window(spec_text, action, pre, post, cp, timeout)
+    if existential == "unscoreable":
+        return "unscoreable", None
+    bf = branching_factor(spec_text, action, pre, cp, timeout)
+    if bf is None:
+        return "unscoreable", None
+    if existential == "pass":
+        return ("pass", bf) if bf == 1 else ("over_permissive", bf)
+    return "fail", bf  # post unreachable
+
 
 def replay_window(spec_text: str, action, pre, post, cp: str, timeout: int = 60) -> str:
     """Return 'pass' | 'fail' | 'unscoreable' for one window."""
@@ -135,6 +198,36 @@ def direct_tv(spec_path: Path, windows, timeout: int = 60):
     return results
 
 
+def functional_tv(spec_path: Path, windows, timeout: int = 60):
+    """Per-window (action_name, status, branching_factor) under the functional check."""
+    spec_text = Path(spec_path).read_text(encoding="utf-8")
+    cp = _classpath()
+    results = []
+    for action, pre, post in windows:
+        name = action["name"] if isinstance(action, dict) else action
+        status, bf = functional_replay_window(spec_text, action, pre, post, cp, timeout)
+        results.append((name, status, bf))
+    return results
+
+
+def summarize_functional(results):
+    total = len(results)
+    counts = {"pass": 0, "over_permissive": 0, "fail": 0, "unscoreable": 0}
+    for _, status, _ in results:
+        counts[status] += 1
+    bfs = [bf for _, _, bf in results if bf is not None]
+    scoreable = counts["pass"] + counts["over_permissive"] + counts["fail"]
+    return {
+        "total": total, **counts,
+        "max_branching_factor": max(bfs) if bfs else None,
+        "windows_branching_gt1": sum(1 for b in bfs if b > 1),
+        # Functional pass rate: image is exactly {post}. Existential-only passes
+        # (over_permissive) are NOT counted as passes here.
+        "functional_conditional": counts["pass"] / scoreable if scoreable else 0.0,
+        "functional_unconditional": counts["pass"] / total if total else 0.0,
+    }
+
+
 def summarize(results):
     total = len(results)
     passed = sum(1 for _, s in results if s == "pass")
@@ -158,8 +251,20 @@ def main():
     ap.add_argument("spec")
     ap.add_argument("--task", default="spin")
     ap.add_argument("--timeout", type=int, default=60)
+    ap.add_argument("--functional", action="store_true",
+                    help="functional check (branching factor must be 1) instead of existential")
     args = ap.parse_args()
     windows = load_trace_windows(args.task)
+    if args.functional:
+        results = functional_tv(Path(args.spec), windows, args.timeout)
+        s = summarize_functional(results)
+        print(f"windows={s['total']} pass={s['pass']} over_permissive={s['over_permissive']} "
+              f"fail={s['fail']} unscoreable={s['unscoreable']}")
+        print(f"max_branching_factor={s['max_branching_factor']} "
+              f"windows_with_bf>1={s['windows_branching_gt1']}")
+        print(f"functional conditional={100*s['functional_conditional']:.1f}%  "
+              f"unconditional={100*s['functional_unconditional']:.1f}%")
+        return
     results = direct_tv(Path(args.spec), windows, args.timeout)
     s = summarize(results)
     print(f"windows={s['total']} passed={s['passed']} scoreable={s['scoreable']} unscoreable={s['unscoreable']}")

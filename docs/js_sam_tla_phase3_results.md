@@ -81,14 +81,49 @@ only the observable variables, drop the mandatory auxiliary state, or offer a
 The SAM ceremony buys explorer/behavior features (Phases 2/4) but costs Phase-3
 conformance; the two can be decoupled.
 
+## Replay-check symmetry (do the two replays check the same relation?)
+
+A review raised that the JS and TLA+ replays were not the same check, and the
+asymmetry favored TLA+. The JS replay is **functional**: `next(pre)` yields one
+state that must equal `post`. The original TLC replay was **existential**: a
+window passed if the action *could* reach `post` from `pre` (`NoPost` violated).
+A TLA+ action is a relation, so an over-permissive action passes existentially
+while admitting wrong post-states — the negative control (a no-op release) only
+proved the replay fails on *unreachable* posts, not on permissive specs.
+
+We addressed this directly (`scripts/tla_direct_tv.py --functional`,
+`scripts/tla_functional_audit.py`):
+
+- **Branching-factor check.** For each window we now enumerate the action's
+  one-step image from the pinned pre-state and require **branching factor 1**
+  (image is exactly `{post}`) — a check as strict as `next(pre) == post`.
+- **Permissive negative control** (`tools/tla/permissive_spin.tla`, holder set to
+  *any* thread on acquire): passes the **existential** replay 28/28 (100%) but the
+  functional check flags 17 windows as over-permissive (branching factor 2) →
+  39.3%. So the existential check *is* fooled by a bad spec; the functional check
+  is not. (A correct reference spec passes both, 28/28, bf 1.) Fully-mixed
+  permissiveness — `lockHolder' \in Threads ∪ {NONE}` — is caught earlier still, as
+  *unscoreable*: TLC throws comparing the string sentinel to an integer thread id.
+- **Audit of the actual arm.** Re-scoring 20 freshly generated constrained TLA+
+  specs (5 × 4 models) under the functional check: **existential = functional =
+  140/140 per model, 0 over-permissive windows, max branching factor 1.** Every
+  generated spec is deterministic, so the TLA+ 100% is *earned* under the strict
+  relation — the asymmetry did not inflate it. The paired study now scores the
+  TLA+ arm with the functional check by default, so the comparison is symmetric.
+
+Net: "plain-JS ties TLA+" and "TLA+ hits 100%" now both hold under one functional
+check applied to both languages, rather than a harsher check on JS alone.
+
 ## Caveats
 
 - **Single task (`spin`), one lock, tiny observable state.** The clean 100% for
-  both minimal-shape arms may not hold for richer control state, where the plain
-  transition function itself becomes non-trivial.
+  both minimal-shape arms may not hold for richer control state. (Partly addressed
+  since: the lean contract holds on `locksvc`, 31 states with a wait queue — see
+  `docs/js_sam_lean_contract.md`.)
 - **This measures transcription fidelity given near-spec-level semantics**, not
   from-scratch derivation (the deployed-JS arm is the closer proxy for that, and
   its gap is larger).
-- **`b = 0` is partly structural** — the TLA+/plain-JS arms fail no windows, so
+- **`b = 0` is partly structural** — the TLA+/plain-JS arms fail no windows (now
+  confirmed under the functional check, not just the existential one), so
   "other-arm-only pass" is impossible by construction; the McNemar reduces to
   whether the other arm's failure count is significant.
