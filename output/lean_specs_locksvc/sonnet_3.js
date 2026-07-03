@@ -1,23 +1,24 @@
-module.exports = { init, next };
-
 function init() {
   return { holder: null, waiters: [] };
 }
 
 function next(state, action, data) {
-  const { holder, waiters } = state;
   const c = data.client;
+  const holder = state.holder;
+  const waiters = state.waiters.slice();
 
   if (action === 'ClientLockRequest') {
-    if (holder === c || waiters.indexOf(c) !== -1) {
+    if (holder === c || waiters.includes(c)) {
       return { holder, waiters };
     }
-    return { holder, waiters: waiters.concat([c]) };
+    const newWaiters = waiters.concat(c).sort((a, b) => a - b);
+    return { holder, waiters: newWaiters };
   }
 
   if (action === 'ServerGrantLock') {
-    if (holder === null && waiters.length > 0 && waiters[0] === c) {
-      return { holder: c, waiters: waiters.slice(1) };
+    if (holder === null && waiters.includes(c)) {
+      const newWaiters = waiters.filter(w => w !== c);
+      return { holder: c, waiters: newWaiters };
     }
     return { holder, waiters };
   }
@@ -35,3 +36,5 @@ function next(state, action, data) {
 
   return { holder, waiters };
 }
+
+module.exports = { init, next };

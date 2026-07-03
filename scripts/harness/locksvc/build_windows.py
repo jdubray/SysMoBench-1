@@ -2,18 +2,27 @@
 """Fold PGo-native locksvc traces into observable-state (pre, action, post) windows.
 
 The lock service's observable state is projected to the logical lock abstraction —
-the same shape all four study arms model, analogous to spin's {lockHeld, lockHolder}:
+the same shape all study arms model, analogous to spin's {lockHeld, lockHolder}:
 
     { "holder":  <client id currently holding the lock, or null>,
-      "waiters": [<client ids that have requested and are waiting, FIFO>] }
+      "waiters": [<client ids that have requested and are waiting — a SET,
+                  canonically sorted ascending>] }
 
-Target actions and their transitions (FCFS: grants go to the head of `waiters`):
+`waiters` is a set, NOT a FIFO. The server serves requests in ARRIVAL order,
+and arrival order at the server is not a function of the client-side events the
+trace exposes (clients logged sending 1,3,2 in one capture while the server's
+queue built as <<3,2,1>> — TCP/goroutine reordering, exactly the property the
+upstream locksvc.tla NoPriorityInversion comment warns about). An earlier
+version of this fold ordered `waiters` by client-send order and required grants
+to go to the head; on reordered runs that silently turned real grants into
+no-op windows — wrong ground truth. At this projection FCFS is unobservable;
+the observable transitions are:
 
-    ClientLockRequest(c)     waiters := waiters ++ [c]                   (c joins the line)
-    ServerGrantLock(c)       if holder==null and head(waiters)==c:       (grant to head)
-                                 holder := c; pop head
-    ClientCriticalSection(c) no state change (asserts holder==c)         (c uses the lock)
-    ClientUnlockRequest(c)   if holder==c: holder := null                (c releases)
+    ClientLockRequest(c)     waiters := waiters ∪ {c}   (if c isn't holder/waiting)
+    ServerGrantLock(c)       if holder==null and c ∈ waiters:
+                                 holder := c; waiters := waiters \\ {c}
+    ClientCriticalSection(c) no state change (asserts holder==c)
+    ClientUnlockRequest(c)   if holder==c: holder := null
 
 Emitted in the loader's *stream form* (one seed `{"state":...}` line then one
 `{"action","data","state":<post>}` line per action; consecutive states form
@@ -94,22 +103,25 @@ def _repair_grant_before_cs(events):
 
 
 def fold(events):
-    """Fold an action stream into [(action, client, post_state), ...] over {holder, waiters}."""
+    """Fold an action stream into [(action, client, post_state), ...] over
+    {holder, waiters} with waiters as a canonically sorted set."""
     holder = None
-    waiters = []
+    waiters = set()
     out = []
     for action, c in _repair_grant_before_cs(events):
         if action == "ClientLockRequest":
-            waiters.append(c)
+            if c != holder:
+                waiters.add(c)
         elif action == "ServerGrantLock":
-            if holder is None and waiters and waiters[0] == c:
-                holder = waiters.pop(0)
+            if holder is None and c in waiters:
+                holder = c
+                waiters.discard(c)
         elif action == "ClientCriticalSection":
             pass  # c is using the lock; observable state unchanged (holder==c)
         elif action == "ClientUnlockRequest":
             if holder == c:
                 holder = None
-        out.append((action, c, {"holder": holder, "waiters": list(waiters)}))
+        out.append((action, c, {"holder": holder, "waiters": sorted(waiters)}))
     return out
 
 

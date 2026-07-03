@@ -9,16 +9,15 @@ function next(state, action, data) {
 
   switch (action) {
     case 'ClientLockRequest': {
-      if (holder === c || waiters.includes(c)) {
-        return { holder, waiters };
+      if (holder !== c && !waiters.includes(c)) {
+        waiters.push(c);
+        waiters.sort((a, b) => a - b);
       }
-      waiters.push(c);
       return { holder, waiters };
     }
     case 'ServerGrantLock': {
-      if (holder === null && waiters.length > 0 && waiters[0] === c) {
-        waiters.shift();
-        return { holder: c, waiters };
+      if (holder === null && waiters.includes(c)) {
+        return { holder: c, waiters: waiters.filter(x => x !== c) };
       }
       return { holder, waiters };
     }

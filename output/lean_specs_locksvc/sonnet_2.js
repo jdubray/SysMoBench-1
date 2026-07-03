@@ -1,37 +1,38 @@
-module.exports = { init, next };
-
 function init() {
   return { holder: null, waiters: [] };
 }
 
 function next(state, action, data) {
-  const { holder, waiters } = state;
   const c = data.client;
-
-  if (action === 'ClientLockRequest') {
-    if (holder === c || waiters.indexOf(c) !== -1) {
-      return { holder, waiters };
+  switch (action) {
+    case 'ClientLockRequest': {
+      if (state.holder === c || state.waiters.includes(c)) {
+        return { holder: state.holder, waiters: state.waiters.slice() };
+      }
+      const waiters = state.waiters.slice();
+      waiters.push(c);
+      waiters.sort((a, b) => a - b);
+      return { holder: state.holder, waiters };
     }
-    return { holder, waiters: waiters.concat([c]) };
-  }
-
-  if (action === 'ServerGrantLock') {
-    if (holder === null && waiters.length > 0 && waiters[0] === c) {
-      return { holder: c, waiters: waiters.slice(1) };
+    case 'ServerGrantLock': {
+      if (state.holder === null && state.waiters.includes(c)) {
+        const waiters = state.waiters.filter(w => w !== c);
+        return { holder: c, waiters };
+      }
+      return { holder: state.holder, waiters: state.waiters.slice() };
     }
-    return { holder, waiters };
-  }
-
-  if (action === 'ClientCriticalSection') {
-    return { holder, waiters };
-  }
-
-  if (action === 'ClientUnlockRequest') {
-    if (holder === c) {
-      return { holder: null, waiters };
+    case 'ClientCriticalSection': {
+      return { holder: state.holder, waiters: state.waiters.slice() };
     }
-    return { holder, waiters };
+    case 'ClientUnlockRequest': {
+      if (state.holder === c) {
+        return { holder: null, waiters: state.waiters.slice() };
+      }
+      return { holder: state.holder, waiters: state.waiters.slice() };
+    }
+    default:
+      return { holder: state.holder, waiters: state.waiters.slice() };
   }
-
-  return { holder, waiters };
 }
+
+module.exports = { init, next };

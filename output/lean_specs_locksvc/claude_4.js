@@ -9,30 +9,30 @@ function next(state, action, data) {
 
   switch (action) {
     case 'ClientLockRequest': {
-      if (holder === c || waiters.indexOf(c) !== -1) {
-        return { holder, waiters };
+      if (holder !== c && !waiters.includes(c)) {
+        waiters.push(c);
+        waiters.sort((a, b) => a - b);
       }
-      waiters.push(c);
-      return { holder, waiters };
+      return { holder: holder, waiters: waiters };
     }
     case 'ServerGrantLock': {
-      if (holder === null && waiters[0] === c) {
-        waiters.shift();
-        return { holder: c, waiters };
+      if (holder === null && waiters.includes(c)) {
+        const newWaiters = waiters.filter(w => w !== c);
+        return { holder: c, waiters: newWaiters };
       }
-      return { holder, waiters };
+      return { holder: holder, waiters: waiters };
     }
     case 'ClientCriticalSection': {
-      return { holder, waiters };
+      return { holder: holder, waiters: waiters };
     }
     case 'ClientUnlockRequest': {
       if (holder === c) {
-        return { holder: null, waiters };
+        return { holder: null, waiters: waiters };
       }
-      return { holder, waiters };
+      return { holder: holder, waiters: waiters };
     }
     default:
-      return { holder, waiters };
+      return { holder: holder, waiters: waiters };
   }
 }
 

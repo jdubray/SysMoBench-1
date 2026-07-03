@@ -2,9 +2,12 @@
 // of the constrained TLA+ relation. No SAM library: a pure transition function
 // over the observable lock-service state, exactly two keys:
 //   holder  — the client id currently holding the lock, or null if free
-//   waiters — FIFO queue of client ids that have requested and are waiting
-// Grants are first-come-first-served: only the head of `waiters` may be granted,
-// and only when the lock is free. Used by scripts/lean_demo.py (task locksvc).
+//   waiters — the SET of client ids that have requested and are waiting,
+//             represented canonically as an ascending-sorted array
+// NOTE: waiters is a set, not a FIFO. The real server grants in ARRIVAL order,
+// and arrival order at the server is not observable from client-side events
+// (network/goroutine reordering) — so at this projection any waiter may be
+// granted when the lock is free. Used by scripts/lean_demo.py (task locksvc).
 
 function init() {
   return { holder: null, waiters: [] };
@@ -19,14 +22,17 @@ function next(state, action, data) {
   const c = data.client;
 
   if (action === 'ClientLockRequest') {
-    // c joins the line — unless it is already holding or already queued.
-    if (c !== holder && !waiters.includes(c)) waiters.push(c);
+    // c joins the waiting set — unless it is already holding or already waiting.
+    if (c !== holder && !waiters.includes(c)) {
+      waiters.push(c);
+      waiters.sort((a, b) => a - b);
+    }
     return { holder, waiters };
   }
   if (action === 'ServerGrantLock') {
-    // FCFS: grant only the head, and only when the lock is free.
-    if (holder === null && waiters.length > 0 && waiters[0] === c) {
-      return { holder: c, waiters: waiters.slice(1) };
+    // Grant any waiter, but only when the lock is free.
+    if (holder === null && waiters.includes(c)) {
+      return { holder: c, waiters: waiters.filter((w) => w !== c) };
     }
     return { holder, waiters };
   }

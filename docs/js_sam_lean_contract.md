@@ -94,13 +94,28 @@ worries remained: the clean 100% might be an artifact of a trivial state space,
 and models might all converge on one solution. A second, structurally different
 task settles both. **locksvc** is PGo's centralised lock service (one server, N
 clients); its observable state is `{ holder, waiters }` — a lock holder plus a
-**FIFO wait queue** (an unbounded list, not a scalar), with four actions
+**waiting set** (an unbounded collection, not a scalar), with four actions
 (`ClientLockRequest`, `ServerGrantLock`, `ClientCriticalSection`,
-`ClientUnlockRequest`) and FCFS grant semantics. Traces are captured from the real
-Go implementation with a distsys trace recorder (`scripts/harness/locksvc/`), then
-folded to observable `(pre, action, post)` windows (60 windows over 5 runs).
+`ClientUnlockRequest`). Traces are captured from the real Go implementation with
+a distsys trace recorder (`scripts/harness/locksvc/`), then folded to observable
+`(pre, action, post)` windows (60 windows over 5 runs).
 
-Same study, `--task locksvc`:
+> **Corpus correction (found by the base-rate audit).** The first version of
+> this corpus modeled `waiters` as a FIFO in *client-send* order and required
+> grants to go to the head. The real server grants in **arrival** order, which
+> network/goroutine scheduling reorders relative to send order (one capture
+> logged sends 1,3,2 while the server queued `<<3,2,1>>` — the exact
+> reordering the upstream `locksvc.tla` NoPriorityInversion comment warns
+> about). The old fold silently turned 10 real grants/releases into no-op
+> windows — wrong ground truth. Arrival order is not a function of the
+> client-side single steps, so at this projection `waiters` is a **set**
+> (canonically sorted array) and a grant may go to any waiter of a free lock.
+> The corpus was re-folded (now: 15 no-change windows, all legitimately the
+> `ClientCriticalSection` no-ops — identity base rate 15/60 = 25%), the
+> reference/prompt updated, and the study regenerated from scratch.
+
+Same study, `--task locksvc`, on the corrected corpus (fresh generations;
+scored on all phases including the bounded progress checks):
 
 | Model | loadable | Phase 2 clean | Phase 3 = 60/60 | Phase 4 hold | **all phases** |
 |---|---|---|---|---|---|
@@ -109,12 +124,14 @@ Same study, `--task locksvc`:
 | Sonnet 4.6 | 5/5 | 5/5 | 5/5 | 5/5 | **5/5** |
 | Haiku 4.5 | 5/5 | 5/5 | 5/5 | 5/5 | **5/5** |
 
-**20/20 again**, on a task whose bounded exploration reaches **31 states** (vs
-spin's 3) and whose reference model must manage a queue. And the solutions
-**de-converge**: 11 distinct specs of 20 (spin: 9/20), spread 36–48 lines with
-per-model structural clustering — genuinely different correct implementations of a
-non-trivial queue-based lock, all passing. Artifacts: `output/lean_specs_locksvc/`,
-`output/lean_full_pipeline_locksvc.json`, traces `data/sys_traces/locksvc/`.
+**20/20 again**, on a task whose bounded exploration reaches **20 states** (vs
+spin's 3) and whose reference model must manage a waiting set. The solutions
+**de-converge**: 14 distinct spec texts of 20 (4/4/4/2 unique per model for
+Opus/Fable/Sonnet/Haiku; spin: 9/20) — genuinely different correct
+implementations, all passing every phase. Conditional on the 45 state-changing
+windows (excluding the 15 CS freebies): still 45/45 for every spec. Artifacts:
+`output/lean_specs_locksvc/`, `output/lean_full_pipeline_locksvc.json`, traces
+`data/sys_traces/locksvc/`.
 
 ## Integration options for SysMoBench
 
@@ -140,8 +157,8 @@ non-trivial queue-based lock, all passing. Artifacts: `output/lean_specs_locksvc
   the pattern," which is part of the original hypothesis. Options 1 and 2 keep JS
   familiarity while removing the fidelity tax; option 2 also keeps the pattern.
 - The tiny-state and convergence worries are now controlled by the second task:
-  `locksvc` reaches 31 states with a real wait queue and still gives 20/20, with
-  11/20 distinct solutions. Two tasks is still a small base — a distributed task
+  `locksvc` reaches 20 states with a real waiting set and still gives 20/20, with
+  14/20 distinct solutions. Two tasks is still a small base — a distributed task
   with genuinely concurrent holders (multiple `hasLock` clients, not just the
   single-holder projection here), or a data structure like `ringbuffer` whose
   `next` core is arithmetic-heavy, would further test where (if anywhere) the lean

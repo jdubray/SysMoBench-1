@@ -11,13 +11,14 @@ function next(state, action, data) {
     case 'ClientLockRequest': {
       if (holder !== c && !waiters.includes(c)) {
         waiters.push(c);
+        waiters.sort((a, b) => a - b);
       }
       return { holder: holder, waiters: waiters };
     }
     case 'ServerGrantLock': {
-      if (holder === null && waiters[0] === c) {
-        waiters.shift();
-        return { holder: c, waiters: waiters };
+      if (holder === null && waiters.includes(c)) {
+        const newWaiters = waiters.filter(w => w !== c);
+        return { holder: c, waiters: newWaiters };
       }
       return { holder: holder, waiters: waiters };
     }

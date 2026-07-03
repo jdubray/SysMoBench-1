@@ -8,36 +8,33 @@ function next(state, action, data) {
 
   switch (action) {
     case 'ClientLockRequest': {
-      // Guard: client must not already be holder or in queue
+      // Add client to waiters if not already holder or waiting
       if (holder === client || waiters.includes(client)) {
         return { holder, waiters };
       }
-      // Append client to back of queue
-      return { holder, waiters: [...waiters, client] };
+      const newWaiters = [...waiters, client].sort((a, b) => a - b);
+      return { holder, waiters: newWaiters };
     }
 
     case 'ServerGrantLock': {
-      // Guard: lock must be free AND client must be at head of queue
-      if (holder === null && waiters.length > 0 && waiters[0] === client) {
-        // Grant lock to client, remove from head of queue
-        return { holder: client, waiters: waiters.slice(1) };
+      // Grant lock only if free and client is waiting
+      if (holder === null && waiters.includes(client)) {
+        const newWaiters = waiters.filter(c => c !== client);
+        return { holder: client, waiters: newWaiters };
       }
-      // No change if guard fails
       return { holder, waiters };
     }
 
     case 'ClientCriticalSection': {
-      // Client uses the lock it holds; observable state unchanged
+      // No observable state change
       return { holder, waiters };
     }
 
     case 'ClientUnlockRequest': {
-      // Guard: client must be the holder
+      // Release lock if client is the holder
       if (holder === client) {
-        // Release the lock
         return { holder: null, waiters };
       }
-      // No change if guard fails
       return { holder, waiters };
     }
 

@@ -971,20 +971,34 @@ test with no kernel build, demonstrating in passing that the trace-capture
 methodology of \S\ref{sec:traces} is not kernel-specific. The harness runs
 PGo's trace-recorder test five times and folds the raw MPCal events into
 observable windows over $\{\mathit{holder}, \mathit{waiters}\}$ --- a lock
-holder plus a FIFO wait queue --- yielding a 60-window corpus (15 per
-action), self-consistent across runs. The fold also repairs a real trace
-artifact: PGo's empty vector clocks allow a \texttt{CriticalSection} event
-to be logged before its own \texttt{Grant}; the harness reorders each grant
-before its critical section, which is causally sound (the critical section
-cannot be entered without the grant). The replay and drivers were
-generalized to be task-agnostic: per-task action domains and invariants,
-and the projection rule in place of \texttt{spin}-specific keys.
+holder plus the \emph{set} of waiting clients --- yielding a 60-window
+corpus (15 per action), self-consistent across runs. The set representation
+is itself a correction found by the base-rate audit: a first version modeled
+\texttt{waiters} as a FIFO in client-\emph{send} order and required grants
+to go to the head, but the real server grants in \emph{arrival} order, which
+the network reorders relative to send order (one capture logged sends
+$1,3,2$ while the server queued $\langle 3,2,1\rangle$ --- the exact
+reordering the upstream specification's NoPriorityInversion comment warns
+about); the send-ordered fold silently converted ten real grants and
+releases into no-op windows. Arrival order is not a function of the
+client-side single steps, so at this projection the waiting clients form a
+set and a grant may go to any waiter of a free lock; the corpus was
+re-folded (15 no-change windows remain, all legitimately the
+\texttt{CriticalSection} no-ops --- identity base rate 25\%) and the study
+regenerated from scratch. The fold also repairs a real trace artifact: PGo's
+empty vector clocks allow a \texttt{CriticalSection} event to be logged
+before its own \texttt{Grant}; the harness reorders each grant before its
+critical section, which is causally sound (the critical section cannot be
+entered without the grant). The replay and drivers were generalized to be
+task-agnostic: per-task action domains and invariants, and the projection
+rule in place of \texttt{spin}-specific keys.
 
-The result replicates in full: \textbf{20 of 20 model-generated lean
-specifications pass every phase} (5/5 per model), now over a 31-state
-observable space with a genuine queue, and with 11/20 unique solutions
-(36--48 lines, clustering by model) --- materially different correct queue
-implementations, all conforming. Both caveats are thereby resolved: the
+The result replicates in full on the corrected corpus: \textbf{20 of 20
+freshly generated lean specifications pass every phase} (5/5 per model,
+including the bounded progress checks), over a 20-state observable space
+with a genuine waiting set, and with 14/20 unique solution texts (4/4/4/2
+per model) --- materially different correct implementations, all conforming,
+45/45 on the state-changing windows. Both caveats are thereby resolved: the
 clean sweep is not an artifact of a trivial state space, and the models do
 not converge on a single memorized solution. Across the two tasks, 40/40
 model-generated lean specifications pass every phase.
@@ -1108,7 +1122,7 @@ We state these plainly; the study is a case study and should be read as one.
   demonstration inherits \texttt{spin}'s three-state observable space and a
   converged solution set ($\sim$9 unique among 20), so the finding needed a
   second task. The \texttt{locksvc} study (\S\ref{sec:locksvc}) supplies it
-  --- a 31-state space, 11/20 unique solutions, 20/20 passing ---
+  --- a 20-state space, 14/20 unique solution texts, 20/20 passing ---
   generalizing the contract-tax removal across tasks of this scale, though
   not yet to large distributed protocols.
 \item \textbf{$b{=}0$ is partly structural, and the effective sample is

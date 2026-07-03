@@ -11,29 +11,29 @@ function next(state, action, data) {
 
   switch (action) {
     case 'ClientLockRequest': {
-      if (holder === c || waiters.indexOf(c) !== -1) {
-        return { holder, waiters };
+      if (holder !== c && !waiters.includes(c)) {
+        waiters.push(c);
+        waiters.sort((a, b) => a - b);
       }
-      waiters.push(c);
-      return { holder, waiters };
+      return { holder: holder, waiters: waiters };
     }
     case 'ServerGrantLock': {
-      if (holder === null && waiters.length > 0 && waiters[0] === c) {
-        return { holder: c, waiters: waiters.slice(1) };
+      if (holder === null && waiters.includes(c)) {
+        return { holder: c, waiters: waiters.filter((w) => w !== c) };
       }
-      return { holder, waiters };
+      return { holder: holder, waiters: waiters };
     }
     case 'ClientCriticalSection': {
-      return { holder, waiters };
+      return { holder: holder, waiters: waiters };
     }
     case 'ClientUnlockRequest': {
       if (holder === c) {
-        return { holder: null, waiters };
+        return { holder: null, waiters: waiters };
       }
-      return { holder, waiters };
+      return { holder: holder, waiters: waiters };
     }
     default:
-      return { holder, waiters };
+      return { holder: holder, waiters: waiters };
   }
 }
 

@@ -4,33 +4,34 @@ function init() {
 
 function next(state, action, data) {
   const holder = state.holder;
-  const waiters = state.waiters;
+  const waiters = state.waiters.slice();
   const c = data.client;
 
   switch (action) {
     case 'ClientLockRequest': {
-      if (holder === c || waiters.includes(c)) {
-        return { holder, waiters: waiters.slice() };
+      if (holder !== c && !waiters.includes(c)) {
+        waiters.push(c);
+        waiters.sort((a, b) => a - b);
       }
-      return { holder, waiters: waiters.concat([c]) };
+      return { holder, waiters };
     }
     case 'ServerGrantLock': {
-      if (holder === null && waiters.length > 0 && waiters[0] === c) {
-        return { holder: c, waiters: waiters.slice(1) };
+      if (holder === null && waiters.includes(c)) {
+        return { holder: c, waiters: waiters.filter(w => w !== c) };
       }
-      return { holder, waiters: waiters.slice() };
+      return { holder, waiters };
     }
     case 'ClientCriticalSection': {
-      return { holder, waiters: waiters.slice() };
+      return { holder, waiters };
     }
     case 'ClientUnlockRequest': {
       if (holder === c) {
-        return { holder: null, waiters: waiters.slice() };
+        return { holder: null, waiters };
       }
-      return { holder, waiters: waiters.slice() };
+      return { holder, waiters };
     }
     default:
-      return { holder, waiters: waiters.slice() };
+      return { holder, waiters };
   }
 }
 

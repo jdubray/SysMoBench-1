@@ -1,7 +1,7 @@
 {"state": {"holder": null, "waiters": []}}
 {"action": "ClientLockRequest", "data": {"client": 3}, "state": {"holder": null, "waiters": [3]}}
-{"action": "ClientLockRequest", "data": {"client": 1}, "state": {"holder": null, "waiters": [3, 1]}}
-{"action": "ClientLockRequest", "data": {"client": 2}, "state": {"holder": null, "waiters": [3, 1, 2]}}
+{"action": "ClientLockRequest", "data": {"client": 1}, "state": {"holder": null, "waiters": [1, 3]}}
+{"action": "ClientLockRequest", "data": {"client": 2}, "state": {"holder": null, "waiters": [1, 2, 3]}}
 {"action": "ServerGrantLock", "data": {"client": 3}, "state": {"holder": 3, "waiters": [1, 2]}}
 {"action": "ClientCriticalSection", "data": {"client": 3}, "state": {"holder": 3, "waiters": [1, 2]}}
 {"action": "ClientUnlockRequest", "data": {"client": 3}, "state": {"holder": null, "waiters": [1, 2]}}
