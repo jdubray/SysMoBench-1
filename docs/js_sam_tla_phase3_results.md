@@ -19,14 +19,53 @@ Prompt: with vs without the pinned single-step semantics block.
 
 All arms use identical source and the identical 28-window corpus.
 
-## Pass rates (mean over 5 generations; 0 unscoreable everywhere → conditional = unconditional)
+## Pass rates (mean over 5 generations, unconditional)
 
-| Model | SAM + none | SAM + semantics | lean + none | lean + semantics | TLA+ |
-|---|---|---|---|---|---|
-| Opus 4.8   | 81.4% | 89.3% | **100%** | **100%** | **100%** |
-| Fable 5    | 57.9% | 95.7% | **100%** | **100%** | **100%** |
-| Sonnet 4.6 | 50.0% | 100%  | **100%** | **100%** | **100%** |
-| Haiku 4.5  | 28.6% | 40.7% | **100%** | **100%** | **100%** |
+The design is now a full **3×2 factorial**: contract (SAM / lean / TLA+) ×
+prompt (without / with the semantics block). The TLA-without-semantics arm
+(`tld`, added for review point 9) mirrors the lean derivation arm exactly.
+
+| Model | SAM + none | SAM + sem | lean + none | lean + sem | TLA + none | TLA + sem |
+|---|---|---|---|---|---|---|
+| Opus 4.8   | 81.4% | 89.3% | **100%** | **100%** | 78.6% | **100%** |
+| Fable 5    | 57.9% | 95.7% | **100%** | **100%** | **100%** | **100%** |
+| Sonnet 4.6 | 50.0% | 100%  | **100%** | **100%** | 78.6% | **100%** |
+| Haiku 4.5  | 28.6% | 40.7% | **100%** | **100%** | 87.1% | **100%** |
+
+## The derivation arms: the first true cross-language split
+
+In derivation mode (no semantics block, both languages), **lean JS beats TLA+
+for Opus and Sonnet** (Δ=.214, p=.0079 each, generation-level exact test),
+directionally for Haiku (Δ=.129, p=.17; 2 of its 5 generations reach 28/28),
+and ties for Fable (both 100%). The mechanism is precise and is **not wrong
+posts**: every TLA+ shortfall window is *unscoreable*, zero are *fail*.
+Without instruction, Opus/Sonnet (5/5 generations each) and Haiku (3/5) wrote
+the **classic TLA+ idiom** — `AcquireLock` guarded on `lockHeld = FALSE` — in
+which a failed acquire attempt is a *disabled action*, not an observable no-op
+step. Pinned at a held pre-state, the action has no successor (TLC deadlocks)
+and the contention windows can't replay. Fable wrote no-op-tolerant actions
+unprompted.
+
+Three readings, all reported:
+
+1. **The lean contract's totality is doing structural work.** `next()` must
+   return a state — a failed attempt *cannot* be modeled as "no step." TLA+'s
+   natural idiom permits partial actions, and most models default to it. The
+   contract effect is thus not only about SAM's ceremony; minimality *plus
+   totality* is what buys replay fidelity.
+2. **The semantics block was doing real, previously invisible work for TLA+**
+   (tld vs tla: Δ=.214, p=.0079 for Opus and Sonnet) — its "held → unchanged"
+   sentence is what makes models write the no-op disjunct. Within the lean
+   contract the same sentence had nothing to do (Δ=0). So "contract first,
+   prompt second" refines to: the prompt matters exactly where the contract
+   under-constrains.
+3. **Under the pre-registered conditional scoring** (over scoreable windows),
+   every tld generation is 100%: the guard-idiom specs are *correct* about
+   every transition they can replay — the shortfall is replay-contract
+   incompatibility (attempt-as-non-step), not incorrect modeling. Conditional
+   and unconditional diverge here for the first time in the study; both are
+   shown, and the unconditional number is the headline (the replay contract
+   is part of the task).
 
 ## The completed 2×2: contract dominates, and unconditionally
 

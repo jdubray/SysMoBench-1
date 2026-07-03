@@ -562,8 +562,13 @@ The repair prompt contains the failing windows themselves, so the experiment
 measures ``can the model exploit precise, correct feedback,'' not blind
 improvement. That is the intended question --- it is exactly the signal
 available inside an agentic repair loop --- but it is not a from-scratch
-re-test, and we ran a single round per attempt; whether Haiku converges
-with more rounds is untested.
+re-test. A multi-round follow-up (run for review point 9;
+\texttt{scripts/repair\_multiround.py}) answers the convergence question:
+Haiku does \emph{not} converge --- three rounds of full-failure feedback
+leave it at 6/28 with its exploration still confined to one state
+(6$\to$6$\to$6; every round's spec saved and audited) --- while Sonnet
+full-repairs in round one again (its second full repair in three runs,
+further evidence the original ``partial'' tier was a sampling artifact).
 
 \section{Experiment 3: \jssam{} versus \tlaplus{}}
 \label{sec:vstla}
@@ -772,21 +777,22 @@ plain-JS generation.
 
 \begin{table}[ht]
 \centering
-\caption{Cross-language Phase-3 conformance (mean pass rate over $N{=}5$
-generations per cell; 28-window corpus). Conditional and unconditional rates
-coincide --- no unscoreable windows. The columns form the completed
-$2{\times}2$ in (contract, prompt) plus the \tlaplus{} reference:
-SAM/lean contract $\times$ without/with the semantics block.}
+\caption{Cross-language Phase-3 conformance (mean unconditional pass rate
+over $N{=}5$ generations per cell; 28-window corpus). The columns form a
+full $3{\times}2$ factorial: contract (SAM / lean / \tlaplus{}) $\times$
+prompt (without / with the semantics block). All shortfall in the
+\tlaplus{}-no-semantics column is \emph{unscoreable} (guard-idiom
+partiality), not wrong post-states; conditional rates there are 100\%.}
 \label{tab:crosslang}
 \small
-\begin{tabular}{lccccc}
+\begin{tabular}{lcccccc}
 \toprule
-Model & SAM, no sem.\ & SAM, sem.\ & lean, no sem.\ & lean, sem.\ & \tlaplus{} \\
+Model & SAM, no sem.\ & SAM, sem.\ & lean, no sem.\ & lean, sem.\ & \tlaplus{}, no sem.\ & \tlaplus{}, sem.\ \\
 \midrule
-Claude Opus 4.8   & 81.4\% & 89.3\%          & \textbf{100\%} & \textbf{100\%} & \textbf{100\%} \\
-Claude Fable 5    & 57.9\% & 95.7\%          & \textbf{100\%} & \textbf{100\%} & \textbf{100\%} \\
-Claude Sonnet 4.6 & 50.0\% & \textbf{100\%}  & \textbf{100\%} & \textbf{100\%} & \textbf{100\%} \\
-Claude Haiku 4.5  & 28.6\% & 40.7\%          & \textbf{100\%} & \textbf{100\%} & \textbf{100\%} \\
+Claude Opus 4.8   & 81.4\% & 89.3\%          & \textbf{100\%} & \textbf{100\%} & 78.6\% & \textbf{100\%} \\
+Claude Fable 5    & 57.9\% & 95.7\%          & \textbf{100\%} & \textbf{100\%} & \textbf{100\%} & \textbf{100\%} \\
+Claude Sonnet 4.6 & 50.0\% & \textbf{100\%}  & \textbf{100\%} & \textbf{100\%} & 78.6\% & \textbf{100\%} \\
+Claude Haiku 4.5  & 28.6\% & 40.7\%          & \textbf{100\%} & \textbf{100\%} & 87.1\% & \textbf{100\%} \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -1122,14 +1128,30 @@ We state these plainly; the study is a case study and should be read as one.
   should not be read as purely a language effect. No repair round was run on
   the \tlaplus{} side --- a repaired Opus might fix its \texttt{CHOOSE}
   readily, and symmetry demands that experiment before strong claims.
-\item \textbf{Experiment 4 measures transcription, not derivation.} With the
-  semantics block present, the constrained and plain arms measure how
-  reliably a model \emph{transcribes} near-spec-level semantics into a
-  language, not whether it can \emph{derive} the semantics from source code.
-  The deployed-JS arm is the closer proxy for derivation --- and there the
-  gap is much larger --- but there is no deployed-\tlaplus{} arm to pair it
-  with (free-form \tlaplus{} was mostly uncheckable), so the
-  derivation-level comparison remains open.
+\item \textbf{The derivation-level comparison is now run --- and it splits
+  the languages for the first time.} An earlier draft noted Experiment 4
+  measured transcription, not derivation, with no
+  \tlaplus{}-without-semantics arm to pair against the lean one. That arm
+  now exists (\texttt{tld}: the constrained \tlaplus{} contract with the
+  semantics block removed, mirroring the lean derivation arm). Result: in
+  derivation mode the lean JS contract beats \tlaplus{} for Opus and Sonnet
+  ($\Delta{=}.214$, $p{=}.0079$ each; 100\% vs.\ 78.6\%), directionally for
+  Haiku (87.1\%, $p{=}.17$), and ties for Fable (100\%). The mechanism is
+  precise and is not wrong post-states: every \tlaplus{} shortfall window is
+  \emph{unscoreable} --- without instruction, most models write the classic
+  \tlaplus{} idiom in which \texttt{AcquireLock} is \emph{guarded} on the
+  lock being free, so a failed attempt is a disabled action rather than an
+  observable no-op step, and the pinned contention windows have no successor.
+  The lean contract's \emph{totality} (\texttt{next()} must return a state)
+  structurally forbids this; \tlaplus{}'s idiom permits it, and the
+  semantics block's ``held $\Rightarrow$ unchanged'' sentence turns out to
+  be what fixes it ($\texttt{tld}$ vs.\ $\texttt{tla}$: $p{=}.0079$ for both
+  affected models). Under the pre-registered \emph{conditional} scoring the
+  guard-idiom specs are 100\% correct on every window they can replay ---
+  the shortfall is replay-contract incompatibility, not incorrect modeling
+  --- so both numbers are reported, with the unconditional as headline.
+  ``Contract first, prompt second'' thus refines to: \emph{the prompt
+  matters exactly where the contract under-constrains}.
 \item \textbf{The plain-JS arm resolves the substrate asymmetry, but was
   added post hoc and answers a narrower question.} The three-arm design left
   ``executable machinery admits bugs a two-variable relation cannot'' as an
@@ -1191,14 +1213,39 @@ We state these plainly; the study is a case study and should be read as one.
 \item \textbf{Model family.} All four models are from one vendor. The
   benchmark's configuration already includes other vendors' models; the
   comparison should be broadened before generalizing.
-\item \textbf{Author positionality.} The first author is the author of the
-  SAM pattern. The evaluation pipeline is automated and the corpus is
-  model-independent, which limits (but does not eliminate) the room for
-  favorable design choices; all code, prompts, traces, and drivers are
-  public for scrutiny. We note that the study's sharpest negative finding
-  --- the contract-tax attribution --- cuts \emph{against} the SAM
-  contract as deployed, which we take as evidence the pipeline is not
-  tilted toward it.
+\item \textbf{Missing arms, with status.} Review enumerated the
+  acknowledged-but-load-bearing gaps; their current state: the
+  \emph{derivation arms} (no semantics block, both languages) are now run
+  (see above --- the one gap that, once filled, changed a conclusion);
+  \emph{multi-round repair} is now run (Haiku does not converge;
+  \S\ref{sec:repair}); the \emph{as-deployed agent-mediated \tlaplus{}
+  Phase 3} remains unrun --- it reintroduces the very confound the direct
+  replay removed, and belongs in a separate agent-capability study;
+  \emph{other vendors} remain blocked on credentials (the registry entries
+  exist in \texttt{config/models.yaml}; only Anthropic keys are available
+  in this environment); and the \emph{factorial on \texttt{locksvc}}
+  remains open (the lean arms exist; the SAM and \tlaplus{} arms need
+  locksvc prompts and a locksvc TLC replay module). Each is inventoried
+  with run instructions in \texttt{REPLICATION.md}.
+\item \textbf{Author positionality --- and the case for independent
+  replication.} The first author is the author of the SAM pattern. The
+  evaluation pipeline is automated and the corpus is model-independent,
+  which limits (but does not eliminate) the room for favorable design
+  choices; and the study's sharpest negative finding --- the contract-tax
+  attribution --- cuts \emph{against} the SAM contract as deployed, which
+  we take as evidence the pipeline is not tilted toward it. But the deeper
+  issue, raised in review, is that the load-bearing materials on
+  \emph{both} sides of every comparison are experimenter-authored: the
+  trace scenarios, the semantics block, the derivation prompts, and the
+  repair prompt. No amount of automation neutralizes that. The repository
+  therefore ships a replication guide (\texttt{REPLICATION.md}) that
+  reruns every analysis from committed raw data without API access,
+  regenerates every experiment from pinned prompts and models, and
+  inventories each experimenter-authored material as an independent
+  variable to audit or vary. We consider an independent replication by
+  researchers unaffiliated with SAM --- ideally the SysMoBench
+  maintainers --- a prerequisite for treating the cross-language
+  conclusions as more than a well-documented single-author case study.
 \end{itemize}
 
 \section{Related work}
@@ -1293,9 +1340,10 @@ but for a better specification \emph{contract}:
 model writes well, with richer machinery generated by the harness rather
 than transcribed by the model. Two questions remain genuinely open:
 whether these conclusions survive \emph{derivation at depth} --- the
-lean-without-semantics cell already shows every model deriving this lock's
-semantics from its source unaided, but a spinlock's observable relation is
-guessable in a way a consensus protocol's is not --- and whether they
+derivation arms already run show every model deriving this lock's semantics
+unaided in the lean shape, and most models falling into \tlaplus{}'s
+partial-action idiom without guidance, but a spinlock's observable relation
+is guessable in a way a consensus protocol's is not --- and whether they
 survive scale.
 
 The experiments that follow are concrete: (1)~promoting the lean
@@ -1336,7 +1384,8 @@ per-window data (\texttt{scripts/tla\_phase3\_study.py},
 \texttt{output/tla\_phase3\_study.json}), the generation-level analysis of
 record and the repair-generalization audit
 (\texttt{scripts/tla\_phase3\_analysis.py},
-\texttt{scripts/repair\_generalization.py}), the pre-registered design and
+\texttt{scripts/repair\_generalization.py}), the trace-coverage audit
+(\texttt{scripts/trace\_coverage\_audit.py}), the pre-registered design and
 results (\texttt{docs/js\_sam\_tla\_phase3\_*.md}), the lean-contract
 prototype and full-pipeline studies (\texttt{tools/plain-js/},
 \texttt{scripts/plain\_js\_tv.py},

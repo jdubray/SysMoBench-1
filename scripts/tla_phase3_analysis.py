@@ -33,10 +33,11 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 RESULTS_FILE = PROJECT_ROOT / "output" / "tla_phase3_study.json"
 
 MODELS = ["claude", "fable", "sonnet", "haiku"]
-# 2x2 factorial in (contract, prompt) + the TLA+ reference arm:
+# Full factorial in (contract, prompt):
 #   js  = SAM  contract, no semantics block     jsc = SAM  contract, semantics block
 #   pjd = lean contract, no semantics block     pjs = lean contract, semantics block
-ARMS = ["js", "jsc", "pjd", "pjs", "tla"]
+#   tld = TLA+ contract, no semantics block     tla = TLA+ contract, semantics block
+ARMS = ["js", "jsc", "pjd", "pjs", "tld", "tla"]
 NW = 28
 
 
@@ -167,8 +168,10 @@ def main():
         ("jsc", "tla"), ("pjs", "tla"), ("pjd", "tla"), ("js", "tla"),
         ("js", "jsc"),   # prompt effect within SAM
         ("pjd", "pjs"),  # prompt effect within lean
+        ("tld", "tla"),  # prompt effect within TLA+ (derivation arm)
         ("js", "pjd"),   # contract effect without semantics
         ("jsc", "pjs"),  # contract effect with semantics
+        ("pjd", "tld"),  # derivation, lean vs TLA+ (no semantics either side)
     )
     for m in MODELS:
         for a, b in comparisons:

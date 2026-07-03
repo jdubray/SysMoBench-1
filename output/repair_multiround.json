@@ -1,0 +1,112 @@
+{
+ "haiku": {
+  "rounds": [
+   {
+    "round": 0,
+    "spec": "output\\compilation_check\\js-sam\\spin\\direct_call_haiku\\20260701195535\\spin.js",
+    "p3_seen": {
+     "passed": 6,
+     "total": 28,
+     "per_action": {
+      "AcquireLock": 0.35294117647058826,
+      "ReleaseLock": 0
+     }
+    }
+   },
+   {
+    "round": 1,
+    "spec": "output\\repair_multiround\\haiku_round1.js",
+    "p3_seen": {
+     "passed": 6,
+     "total": 28,
+     "per_action": {
+      "AcquireLock": 0.35294117647058826,
+      "ReleaseLock": 0
+     }
+    },
+    "p3_heldout": {
+     "passed": 10,
+     "total": 10,
+     "per_action": {
+      "ReleaseLock": 1,
+      "AcquireLock": 1
+     }
+    },
+    "p2_distinct": 1,
+    "p4": {
+     "held": 3,
+     "total": 3,
+     "failed": []
+    }
+   },
+   {
+    "round": 2,
+    "spec": "output\\repair_multiround\\haiku_round2.js",
+    "p3_seen": {
+     "passed": 6,
+     "total": 28,
+     "per_action": {
+      "AcquireLock": 0.35294117647058826,
+      "ReleaseLock": 0
+     }
+    },
+    "p3_heldout": {
+     "passed": 10,
+     "total": 10,
+     "per_action": {
+      "ReleaseLock": 1,
+      "AcquireLock": 1
+     }
+    },
+    "p2_distinct": 1,
+    "p4": {
+     "held": 3,
+     "total": 3,
+     "failed": []
+    }
+   }
+  ]
+ },
+ "sonnet": {
+  "rounds": [
+   {
+    "round": 0,
+    "spec": "output\\compilation_check\\js-sam\\spin\\direct_call_sonnet\\20260701195451\\spin.js",
+    "p3_seen": {
+     "passed": 14,
+     "total": 28,
+     "per_action": {
+      "AcquireLock": 0.8235294117647058,
+      "ReleaseLock": 0
+     }
+    }
+   },
+   {
+    "round": 1,
+    "spec": "output\\repair_multiround\\sonnet_round1.js",
+    "p3_seen": {
+     "passed": 28,
+     "total": 28,
+     "per_action": {
+      "AcquireLock": 1,
+      "ReleaseLock": 1
+     }
+    },
+    "p3_heldout": {
+     "passed": 10,
+     "total": 10,
+     "per_action": {
+      "ReleaseLock": 1,
+      "AcquireLock": 1
+     }
+    },
+    "p2_distinct": 7,
+    "p4": {
+     "held": 3,
+     "total": 3,
+     "failed": []
+    }
+   }
+  ]
+ }
+}
