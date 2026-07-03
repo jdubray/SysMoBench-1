@@ -23,15 +23,43 @@ all four phases against the **same** 28-window transition-validation corpus.
 > the old metric could not reveal. Full audit: "Phase-2 metric audit" in
 > `docs/js_sam_vs_tla_comparison.md`.
 
+## Corpus base rate (added after review)
+
+Of the corpus's 17 acquire windows, **6 are contention windows with post =
+pre** — a spec whose acquire (or whose every action) is a no-op passes them for
+free. All 11 release windows and the other 11 acquire windows change state. So
+the **identity base rate is 6/28 = 21.4% overall and 6/17 = 35.3% on
+acquires** — and every result must be read against it:
+
+| Model | headline P3 | Acquire | Release | **conditional on change (22 windows)** |
+|---|---|---|---|---|
+| Opus 4.8   | 89.3% | 14/17 | 11/11 | **86.4%** (19/22) |
+| Fable 5    | 50.0% | 14/17 | 0/11  | **36.4%** (8/22) |
+| Sonnet 4.6 | 50.0% | 14/17 | 0/11  | **36.4%** (8/22) |
+| Haiku 4.5  | 21.4% | 6/17  | 0/11  | **0.0%** (0/22) |
+
+**Haiku's 21.4% is exactly the identity base rate.** Its "Acquire 35%" was
+precisely the freebie fraction of acquire windows (6/17 = 35.3%); it passed
+zero windows that required producing a state change. Its spec models nothing —
+consistent with the Phase-2 metric audit showing that spec's exploration never
+leaves its initial state. The qualitative reading of the spread therefore
+changes: on the discriminating (change) windows the range is not
+21.4%–89.3% but **0%–86.4%**, with the weakest model at literal zero.
+(Replication note: the paired study's Haiku deployed-arm generations score
+9.1% conditional-on-change — 2 real windows — with 75% of their headline
+passes being freebies; re-scoring saved Haiku specs shows a ±2-window
+sensitivity in the sequential replay we attribute to async-error attribution
+timing. Either way the score sits at or within two windows of the base rate.)
+
 ## Finding
 
 **Transition validation is the discriminating phase.** Every model passes syntax
 (Phase 1), bounded model checking (Phase 2), and invariant verification (Phase 4)
 — those phases do not separate the models on this task. Only Phase 3, which
 replays real Asterinas spinlock transitions against each generated model, spreads
-them out:
+them out — and conditional on change windows (the base-rate-corrected metric):
 
-> Opus 4.8 (89.3%) ≫ Fable 5 = Sonnet 4.6 (50.0%) ≫ Haiku 4.5 (21.4%)
+> Opus 4.8 (86.4%) ≫ Fable 5 = Sonnet 4.6 (36.4%) ≫ Haiku 4.5 (**0%**)
 
 This confirms that, for JS-SAM on `spin`, the signal lives in whether the
 generated model reproduces the **real system's behavior** — not in whether it

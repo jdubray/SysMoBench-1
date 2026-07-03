@@ -68,6 +68,30 @@ which was an artifact of examining only the SAM column:
   without semantics while the semantics block within SAM is not (3 of 4 models
   below 100%).
 
+## Corpus base rate (added after review)
+
+6 of the 28 windows (all contention acquires) have **post = pre**: a no-op
+action passes them for free, so the identity function scores 21.4% overall
+(35.3% on acquires). Every arm of every model passes all 6 freebies; the
+discriminating metric is the pass rate **conditional on the 22 change
+windows** (`scripts/tla_phase3_analysis.py`, section 0):
+
+| Model | SAM+none | SAM+sem | lean+none | lean+sem | TLA+ |
+|---|---|---|---|---|---|
+| Opus   | 76.4% | 86.4% | 100% | 100% | 100% |
+| Fable  | 46.4% | 94.5% | 100% | 100% | 100% |
+| Sonnet | 36.4% | 100%  | 100% | 100% | 100% |
+| Haiku  | **9.1%** | 24.5% | 100% | 100% | 100% |
+
+The correction is largest exactly where scores are lowest: Haiku's deployed-SAM
+headline of 28.6% is 9.1% once freebies are excluded (75% of its headline
+passes were no-change windows), and its constrained-SAM 40.7% is 24.5%
+(52.6% freebies). The perfect arms are unaffected (a 100% arm earns its
+freebies and everything else). No qualitative conclusion of the factorial
+flips, but the SAM-arm gaps are *larger* than the headline rates suggest, and
+Experiment 1's model spread should be read as 0–86.4% conditional-on-change,
+not 21.4–89.3% (see `docs/js_sam_model_comparison.md`).
+
 ## Statistics at the correct unit (retraction + reanalysis)
 
 **Retraction.** An earlier version of this section reported window-level McNemar

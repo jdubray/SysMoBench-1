@@ -53,16 +53,17 @@ pattern, whose semantics deliberately mirror \tlaplus{} --- to test whether
 LLMs model systems more faithfully in a language abundant in their training
 data. We instrument the Asterinas kernel spinlock for ground-truth traces
 and evaluate four Claude models end to end. Trace conformance is the only
-phase that discriminates (21.4\%--89.3\%; the other phases are unanimous,
-one pass provably vacuous), and one round of trace feedback repairs some
-specifications completely --- audited as root-cause fixes, not
+phase that discriminates (0--86.4\% on state-changing windows, against an
+identity base rate the weakest model exactly matches; the other phases are
+unanimous, one pass provably vacuous), and one round of trace feedback
+repairs some specifications completely --- audited as root-cause fixes, not
 memorization. JavaScript reaches an evaluable artifact 4/4 times versus 1/4
 for \tlaplus{}, a gap of guardrails rather than capability. A
 pre-registered, paired, controlled comparison --- completed to a full
 $2{\times}2$ factorial in (contract, prompt) after review --- then resolves
 the language question in an unexpected place: the specification
 \emph{contract} is the dominant, uniform factor. A bare
-\texttt{next(state, action, data)} function, structurally isomorphic to the
+\texttt{next(state, action, model)} function, structurally isomorphic to the
 \tlaplus{} relation, ties \tlaplus{} at 100\% for every model \emph{with or
 without spec-level semantics in the prompt}, while prompt prescriptiveness
 --- large enough to masquerade as a language effect --- moves only two of
@@ -140,9 +141,11 @@ spinlock~\cite{asterinas}):
   28-window corpus used throughout.
 \item \textbf{A four-model comparison} (\S\ref{sec:models}) showing that
   Phases 1, 2, and 4 have no discriminating power on this task while Phase 3
-  spreads the models from 21.4\% to 89.3\% --- and that general model
-  capability does not predict modeling accuracy: the most capable model tested
-  produced a specification that no-ops every lock release.
+  spreads the models from 0\% to 86.4\% on state-changing windows (21.4\% to
+  89.3\% headline, against an identity base rate of 21.4\%) --- and that
+  general model capability does not predict modeling accuracy: the most
+  capable model tested produced a specification that no-ops every lock
+  release.
 \item \textbf{A repair-loop experiment} (\S\ref{sec:repair}) demonstrating
   that self-correction from precise trace feedback is a distinct capability
   axis from one-shot accuracy --- capable models repair fully (verified by a
@@ -383,7 +386,11 @@ via the direct API path.
 \begin{table}[ht]
 \centering
 \caption{Four-phase \jssam{} results on \texttt{spin} (28-window corpus).
-P3 per-action columns give windows passed / windows of that action.}
+P3 per-action columns give windows passed / windows of that action. Base
+rate: 6 of the 28 windows (all contention acquires) have post $=$ pre, so
+the identity function scores 21.4\% overall and 6/17 on acquires ---
+Haiku's row equals that base rate exactly; conditional on the 22
+state-changing windows the P3 column reads 86.4 / 36.4 / 36.4 / 0\%.}
 \label{tab:models}
 \small
 \begin{tabular}{lccrccc}
@@ -418,7 +425,16 @@ and its Phase-4 invariants are satisfied over that single state. Phase 2
 verifies checkability, not semantic adequacy; the distinct-state count, now
 reported by the checker, is the semantic signal. Phase 3 spreads the models
 across a $4\times$ range, and --- restricted to comparisons it can make ---
-orders Opus above the mid tier above Haiku. This independently reproduces, in
+orders Opus above the mid tier above Haiku. A base-rate audit prompted by
+review sharpens the spread: 6 of the 28 windows (all contention acquires)
+have post $=$ pre, so the \emph{identity function} scores 21.4\% overall and
+35.3\% on acquires. Haiku's row is exactly that base rate --- its
+``Acquire 6/17'' is precisely the six freebies, and it passes \emph{zero}
+windows requiring a state change --- so conditional on the 22 change windows
+the spread is not 21.4--89.3\% but \textbf{0--86.4\%} (Opus 19/22, Fable and
+Sonnet 8/22, Haiku 0/22). Every arm of every model collects all six
+freebies; the conditional-on-change rate is the discriminating metric and
+accompanies headline rates hereafter. This independently reproduces, in
 a non-formal language, the central SysMoBench finding for \tlaplus{}: internal
 consistency is cheap; conformance with the real system is where specifications
 fail~\cite{sigops2026}.
@@ -715,7 +731,8 @@ specification is a bare two-variable relation. We therefore ran four arms:
 \textbf{JS(constrained)} --- the deployed prompt plus the \emph{identical}
 semantics block used by the \tlaplus{} arm;
 \textbf{plain-JS} --- the same constrained semantics, but the specification
-is a bare \texttt{next(state, action, data)} transition function over only
+is a bare \texttt{next(state, action, model)} transition function
+(argument names follow SAM usage) over only
 $\{\mathit{lockHeld}, \mathit{lockHolder}\}$: JavaScript, yet structurally
 isomorphic to the \tlaplus{} relation, with no SAM library and no auxiliary
 state; and \textbf{TLA(constrained)}. JS(constrained) vs.\ TLA(constrained)
@@ -887,7 +904,7 @@ the same corpus).
 \paragraph{Design implication for \jssam{}.}
 The Phase-3 fidelity gap is the cost of the SAM specification contract, not
 a language limit --- and the two can be decoupled. The backend can offer a
-lean specification shape (\texttt{next(state, action, data)}, the JavaScript
+lean specification shape (\texttt{next(state, action, model)}, the JavaScript
 analogue of the \tlaplus{} relation), or score conformance against a plain
 transition core over only the observable variables, dropping the mandatory
 auxiliary state from the replay contract. SAM's ceremony is not gratuitous
@@ -1029,12 +1046,13 @@ plainly. This paper's first finding is that Phase 3 was the only phase
 that discriminated among models; its last is a specification shape under
 which every model --- Haiku included --- scores 100\% on both tasks. The
 lean contract does not break the benchmark; it \emph{saturates} these two
-tasks, and the saturation is itself informative: given spec-level
-semantics and a minimal contract, transcription is a solved problem for
-current frontier models on systems of this size. What saturation exposes
-is exactly what should be measured next: derivation (no semantics block),
-scale (systems whose behavior cannot be summarized in a prompt), and the
-temporal properties no bounded safety explorer checks. A benchmark's job
+tasks, and the saturation is itself informative: under a minimal contract
+--- with or without the semantics in the prompt --- specifying a system of
+this size is a solved problem for current frontier models. What saturation
+exposes is exactly what should be measured next: derivation at depth
+(systems whose observable relation cannot be guessed from action names or
+summarized in a prompt), scale, and the temporal properties no bounded
+safety explorer checks. A benchmark's job
 is to move its frontier when models catch up; the lean contract is that
 motion, not its defeat.
 
@@ -1190,8 +1208,10 @@ extending the lean-contract validation to a second task (a distributed
 lock service).
 The results make four points with unusual precision for a single case study:
 transition validation against real traces is the only phase that
-discriminated among four frontier models (21.4\%--89.3\%, with all other
-phases unanimous); one round of trace-feedback repair reveals a
+discriminated among four frontier models (0--86.4\% on state-changing
+windows, with all other phases unanimous and the weakest model sitting
+exactly at the corpus's identity base rate); one round of trace-feedback
+repair reveals a
 self-correction axis that one-shot scores conceal --- capable models repair
 fully and verifiably (a held-out audit found root-cause fixes, not memorized
 windows), the weakest not at all; the same

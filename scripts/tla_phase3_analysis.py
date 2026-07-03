@@ -80,10 +80,58 @@ def text_uniqueness(glob_dir):
     return {m: len(s) for m, s in sorted(by_model.items())}
 
 
+def corpus_classes():
+    """Split window indices into change (post != pre) and no-change (post == pre).
+
+    No-change windows are contention acquires: the trace records an attempt that
+    leaves the observable lock untouched, so a spec whose acquire (or whose
+    every action) is a no-op passes them for free. The identity function's
+    score on this corpus is the base rate every result must be read against.
+    """
+    import sys as _sys
+    _sys.path.insert(0, str(PROJECT_ROOT))
+    from tla_eval.evaluation.semantics.trace_loader import load_trace_windows
+    w = load_trace_windows("spin")
+    nochange = [i for i, (a, pre, post) in enumerate(w) if pre == post]
+    change = [i for i in range(len(w)) if i not in nochange]
+    actions = [a["name"] if isinstance(a, dict) else a for a, _, _ in w]
+    return change, nochange, actions
+
+
 def main():
     cells = load()
+    change_idx, nochange_idx, actions = corpus_classes()
 
-    print("===== 1. UNIQUENESS (behavioral fingerprints per (model, arm), N=5 gens) =====")
+    print("===== 0. CORPUS BASE RATE (change vs no-change windows) =====")
+    n_acq = sum(1 for a in actions if a == "AcquireLock")
+    nc_acq = sum(1 for i in nochange_idx if actions[i] == "AcquireLock")
+    print(f"28 windows: {len(change_idx)} change, {len(nochange_idx)} no-change "
+          f"(all {nc_acq} no-change are contention acquires; {nc_acq}/{n_acq} = "
+          f"{100*nc_acq/n_acq:.1f}% of acquire windows are freebies).")
+    print(f"IDENTITY BASE RATE: a spec whose every action is a no-op scores "
+          f"{len(nochange_idx)}/28 = {100*len(nochange_idx)/28:.1f}% overall "
+          f"and {nc_acq}/{n_acq} = {100*nc_acq/n_acq:.1f}% on acquires.")
+
+    print("\n----- per (model, arm): pass rate split by window class -----")
+    print(f"{'model':8s} {'arm':4s} {'change (22)':>12s} {'no-change (6)':>14s} {'freebie share of passes':>24s}")
+    for m in MODELS:
+        for a in ARMS:
+            if (m, a) not in cells:
+                continue
+            ch = nc = chn = ncn = 0
+            for fp in cells[(m, a)].values():
+                ch += sum(1 for i in change_idx if fp[i] == "pass")
+                chn += len(change_idx)
+                nc += sum(1 for i in nochange_idx if fp[i] == "pass")
+                ncn += len(nochange_idx)
+            total_pass = ch + nc
+            share = 100 * nc / total_pass if total_pass else 0.0
+            print(f"{m:8s} {a:4s} {100*ch/chn:>11.1f}% {100*nc/ncn:>13.1f}% {share:>23.1f}%")
+    print("\nA cell at 100% on no-change but ~0% on change windows is scoring the")
+    print("identity base rate, not modeling. Conditional-on-change pass rate is the")
+    print("discriminating metric; report it alongside the headline.")
+
+    print("\n===== 1. UNIQUENESS (behavioral fingerprints per (model, arm), N=5 gens) =====")
     print(f"{'model':8s}" + "".join(f"{a:>8s}" for a in ARMS))
     for m in MODELS:
         row = []
