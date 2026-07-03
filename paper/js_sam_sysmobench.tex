@@ -60,14 +60,18 @@ Using the Asterinas OS spinlock task, we instrument the real kernel, run it
 under QEMU, and capture a 28-window transition corpus; we then evaluate four
 Claude models (Haiku~4.5, Sonnet~4.6, Opus~4.8, Fable~5) end to end. Four
 findings emerge. First, trace conformance is the only phase with discriminating
-power: all four models pass syntax, model checking, and invariant verification,
-while conformance spreads them from 21.4\% to 89.3\% --- including a frontier
+power: all four models pass syntax, model checking, and invariant verification
+(one of them, a metric audit later showed, vacuously --- its exploration
+never left the initial state), while conformance spreads them from 21.4\% to 89.3\% --- including a frontier
 model that silently no-ops an entire action (every \texttt{ReleaseLock}) yet
 passes every internal-consistency phase. Second, a single round of
-repair-from-trace-feedback separates the models into three clean tiers (full,
-partial, and no self-correction), and shows that one-shot accuracy and
-repair ability are different axes: the model with the categorical release
-defect repairs to 100\%, while a mid-tier model given identical feedback cannot.
+repair-from-trace-feedback splits the models into repairers and a
+non-repairer (a replication showed the apparent middle ``partial'' tier does
+not survive resampling), and shows that one-shot accuracy and repair ability
+are different axes: the model with the categorical release defect repairs to
+100\% --- with a generalization audit confirming the repairs are root-cause
+fixes, not memorized windows --- while the weakest model cannot use the
+feedback at all.
 Third, on the same task and models, 4/4 \jssam{} specifications are
 end-to-end checkable versus 1/4 for \tlaplus{}, attributable to a concrete
 \tlaplus{} semantic pitfall (unbounded \texttt{CHOOSE}) that JavaScript's
@@ -167,8 +171,10 @@ spinlock~\cite{asterinas}):
   capability does not predict modeling accuracy: the most capable model tested
   produced a specification that no-ops every lock release.
 \item \textbf{A repair-loop experiment} (\S\ref{sec:repair}) demonstrating
-  that self-correction from precise trace feedback is a sharper capability
-  gradient than one-shot accuracy, separating the four models into three tiers.
+  that self-correction from precise trace feedback is a distinct capability
+  axis from one-shot accuracy --- capable models repair fully (verified by a
+  held-out generalization audit as fixes, not memorization), the weakest not
+  at all, with mid-tier outcomes unstable at $N{=}1$.
 \item \textbf{A \jssam{}-vs-\tlaplus{} head-to-head} (\S\ref{sec:vstla}):
   with identical models and task, 4/4 \jssam{} specifications reach
   end-to-end evaluability versus 1/4 for \tlaplus{}, with each \tlaplus{}
@@ -491,7 +497,9 @@ confirm the result still passes Phase 1; re-score Phase 3 on the same
 
 \begin{table}[ht]
 \centering
-\caption{One-round repair from Phase-3 feedback (same 28-window corpus).}
+\caption{One-round repair from Phase-3 feedback (same 28-window corpus;
+original run --- the generalization-audit replication differs for Sonnet,
+which repaired to 28/28 there).}
 \label{tab:repair}
 \small
 \begin{tabular}{lcccc}
@@ -506,34 +514,64 @@ Claude Haiku 4.5  & 21.4\% (6/28)  & 21.4\% (6/28)  & 35\% $\to$ 35\%  & 0\% $\t
 \end{tabular}
 \end{table}
 
-\paragraph{Self-correction is a clean three-tier gradient.}
-Opus and Fable repair to a perfect 28/28 in a single round. Sonnet repairs
-\emph{partially}: it fixes the \texttt{try\_lock} acquisition defect
-completely but cannot fix its release path even when handed the exact failing
-transitions --- it uses one class of feedback and not the other. Haiku does
-not improve at all. The repair axis separates the four models into three
-distinct tiers (full / partial / none), more cleanly than the baseline
-scores, which conflate Fable and Sonnet at 50\%.
+\paragraph{Self-correction separates the models --- but the middle tier is noise.}
+In the run of Table~\ref{tab:repair}, Opus and Fable repair to a perfect
+28/28 in a single round, Sonnet repairs \emph{partially} (it fixes the
+\texttt{try\_lock} acquisition defect but not its release path), and Haiku
+does not improve at all --- superficially a clean three-tier gradient
+(full / partial / none). A replication run (part of the generalization
+audit below, with artifacts saved) revised this: \emph{Sonnet also repaired
+to 28/28}. The boundary that is stable across both runs is two-tier ---
+Opus, Fable, and (unstably) Sonnet can exploit transition-level feedback;
+Haiku cannot --- and single-round repair outcomes for mid-tier models are
+sampling-dependent at $N{=}1$.
 
 \paragraph{The Fable reversal.}
 Fable's baseline looked no better than Sonnet's, and its failure mode ---
 a whole action silently broken --- looked worse. Yet under repair, Fable
-fully recovers while Sonnet, given identical feedback for the identical
-symptom (Release 0/11), cannot. This reframes the baseline: Fable's release
-defect was a \emph{recoverable slip}, not a capability ceiling, whereas
-Sonnet's is the latter. One-shot specification accuracy and
+fully recovers: its release defect was a \emph{recoverable slip}, not a
+capability ceiling. One-shot specification accuracy and
 repair-from-feedback are different axes of capability, and a benchmark that
 measures only the former will misrank models for any workflow that includes
 a correction loop --- which realistic agentic formal-modeling workflows
-do~\cite{sigops2026}.
+do~\cite{sigops2026}. (An earlier draft contrasted Fable's recovery with
+Sonnet's failure to fix the identical symptom; the replication run removed
+that contrast.)
+
+\paragraph{Generalization audit: the repairs are fixes, not memorization.}
+Repaired specifications were originally re-checked only on Phases 1 and 3,
+on the same 28 windows quoted in the repair prompt --- leaving open that a
+repair might \emph{memorize} the failing windows (branch on the pre-state,
+return the expected post), which would make this an experiment about
+prompt-following rather than modeling. An audit re-ran the repair loop with
+artifacts saved and scored each baseline and repaired specification on the
+seen corpus, on \emph{held-out} windows, and on Phases 2 and 4. The 28 seen
+windows collapse to 8 distinct (pre-state, action, data) combinations; the
+held-out set is the 10 combinations of the observable domain the corpus
+never shows (acquire on a held lock, release by a non-holder, release of a
+free lock). All repaired specifications pass all held-out windows, reach
+the same 7 distinct semantic states as a correct specification under
+bounded exploration (Haiku's unrepaired specification remains at 1), and
+hold all invariants. Direct inspection found no memorization --- no
+state-equality tables or window literals; the successful repairs are the
+same root-cause fix, moving the release ownership check from the auxiliary
+\texttt{threadStatus} guard (unsatisfiable under a pinned observable
+pre-state) to the authoritative \texttt{lockHeld}/\texttt{lockHolder},
+with Sonnet's repair documenting the diagnosis in a comment. One
+structural honesty note: because the kernel instrumentation emits acquire
+events at acquisition success, every held-out combination is an observable
+no-op, so held-out scoring alone refutes only memorizers with unsafe
+defaults --- the inspection and Phase-2/4 evidence carry the conclusion,
+and a state-changing held-out set (as \texttt{locksvc} affords) is the
+right vehicle for a stronger version of this audit.
 
 \paragraph{What this does and does not measure.}
 The repair prompt contains the failing windows themselves, so the experiment
 measures ``can the model exploit precise, correct feedback,'' not blind
 improvement. That is the intended question --- it is exactly the signal
 available inside an agentic repair loop --- but it is not a from-scratch
-re-test, and we ran a single round; whether Sonnet or Haiku converge with
-more rounds is untested.
+re-test, and we ran a single round per attempt; whether Haiku converges
+with more rounds is untested.
 
 \section{Experiment 3: \jssam{} versus \tlaplus{}}
 \label{sec:vstla}
@@ -1070,8 +1108,10 @@ lock service).
 The results make four points with unusual precision for a single case study:
 transition validation against real traces is the only phase that
 discriminated among four frontier models (21.4\%--89.3\%, with all other
-phases unanimous); one round of trace-feedback repair separates models into
-full/partial/no self-correction tiers that one-shot scores conceal; the same
+phases unanimous); one round of trace-feedback repair reveals a
+self-correction axis that one-shot scores conceal --- capable models repair
+fully and verifiably (a held-out audit found root-cause fixes, not memorized
+windows), the weakest not at all; the same
 models that reach an evaluable specification in JavaScript 4/4 times manage
 it in \tlaplus{} 1/4 times, for two identifiable structural reasons; and
 under a pre-registered, paired, four-arm controlled comparison, the

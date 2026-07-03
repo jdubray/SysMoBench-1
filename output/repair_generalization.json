@@ -1,0 +1,242 @@
+{
+ "claude": {
+  "baseline_spec": "output\\compilation_check\\js-sam\\spin\\direct_call_claude\\20260701195348\\spin.js",
+  "baseline": {
+   "p3_seen": {
+    "passed": 25,
+    "total": 28,
+    "per_action": {
+     "AcquireLock": 0.8235294117647058,
+     "ReleaseLock": 1
+    }
+   },
+   "p3_heldout": {
+    "passed": 10,
+    "total": 10,
+    "per_action": {
+     "ReleaseLock": 1,
+     "AcquireLock": 1
+    }
+   },
+   "p2": {
+    "success": true,
+    "classification": null,
+    "distinct_states": 7
+   },
+   "p4": {
+    "held": 3,
+    "total": 3,
+    "failed": []
+   }
+  },
+  "repaired_spec": "output\\repair_specs\\claude_repaired.js",
+  "repaired": {
+   "p3_seen": {
+    "passed": 28,
+    "total": 28,
+    "per_action": {
+     "AcquireLock": 1,
+     "ReleaseLock": 1
+    }
+   },
+   "p3_heldout": {
+    "passed": 10,
+    "total": 10,
+    "per_action": {
+     "ReleaseLock": 1,
+     "AcquireLock": 1
+    }
+   },
+   "p2": {
+    "success": true,
+    "classification": null,
+    "distinct_states": 7
+   },
+   "p4": {
+    "held": 3,
+    "total": 3,
+    "failed": []
+   }
+  }
+ },
+ "fable": {
+  "baseline_spec": "output\\compilation_check\\js-sam\\spin\\direct_call_fable\\20260701201716\\spin.js",
+  "baseline": {
+   "p3_seen": {
+    "passed": 14,
+    "total": 28,
+    "per_action": {
+     "AcquireLock": 0.8235294117647058,
+     "ReleaseLock": 0
+    }
+   },
+   "p3_heldout": {
+    "passed": 10,
+    "total": 10,
+    "per_action": {
+     "ReleaseLock": 1,
+     "AcquireLock": 1
+    }
+   },
+   "p2": {
+    "success": true,
+    "classification": null,
+    "distinct_states": 7
+   },
+   "p4": {
+    "held": 3,
+    "total": 3,
+    "failed": []
+   }
+  },
+  "repaired_spec": "output\\repair_specs\\fable_repaired.js",
+  "repaired": {
+   "p3_seen": {
+    "passed": 28,
+    "total": 28,
+    "per_action": {
+     "AcquireLock": 1,
+     "ReleaseLock": 1
+    }
+   },
+   "p3_heldout": {
+    "passed": 10,
+    "total": 10,
+    "per_action": {
+     "ReleaseLock": 1,
+     "AcquireLock": 1
+    }
+   },
+   "p2": {
+    "success": true,
+    "classification": null,
+    "distinct_states": 7
+   },
+   "p4": {
+    "held": 3,
+    "total": 3,
+    "failed": []
+   }
+  }
+ },
+ "sonnet": {
+  "baseline_spec": "output\\compilation_check\\js-sam\\spin\\direct_call_sonnet\\20260701195451\\spin.js",
+  "baseline": {
+   "p3_seen": {
+    "passed": 14,
+    "total": 28,
+    "per_action": {
+     "AcquireLock": 0.8235294117647058,
+     "ReleaseLock": 0
+    }
+   },
+   "p3_heldout": {
+    "passed": 10,
+    "total": 10,
+    "per_action": {
+     "ReleaseLock": 1,
+     "AcquireLock": 1
+    }
+   },
+   "p2": {
+    "success": true,
+    "classification": null,
+    "distinct_states": 7
+   },
+   "p4": {
+    "held": 3,
+    "total": 3,
+    "failed": []
+   }
+  },
+  "repaired_spec": "output\\repair_specs\\sonnet_repaired.js",
+  "repaired": {
+   "p3_seen": {
+    "passed": 28,
+    "total": 28,
+    "per_action": {
+     "AcquireLock": 1,
+     "ReleaseLock": 1
+    }
+   },
+   "p3_heldout": {
+    "passed": 10,
+    "total": 10,
+    "per_action": {
+     "ReleaseLock": 1,
+     "AcquireLock": 1
+    }
+   },
+   "p2": {
+    "success": true,
+    "classification": null,
+    "distinct_states": 7
+   },
+   "p4": {
+    "held": 3,
+    "total": 3,
+    "failed": []
+   }
+  }
+ },
+ "haiku": {
+  "baseline_spec": "output\\compilation_check\\js-sam\\spin\\direct_call_haiku\\20260701195535\\spin.js",
+  "baseline": {
+   "p3_seen": {
+    "passed": 6,
+    "total": 28,
+    "per_action": {
+     "AcquireLock": 0.35294117647058826,
+     "ReleaseLock": 0
+    }
+   },
+   "p3_heldout": {
+    "passed": 10,
+    "total": 10,
+    "per_action": {
+     "ReleaseLock": 1,
+     "AcquireLock": 1
+    }
+   },
+   "p2": {
+    "success": true,
+    "classification": null,
+    "distinct_states": 1
+   },
+   "p4": {
+    "held": 3,
+    "total": 3,
+    "failed": []
+   }
+  },
+  "repaired_spec": "output\\repair_specs\\haiku_repaired.js",
+  "repaired": {
+   "p3_seen": {
+    "passed": 6,
+    "total": 28,
+    "per_action": {
+     "AcquireLock": 0.35294117647058826,
+     "ReleaseLock": 0
+    }
+   },
+   "p3_heldout": {
+    "passed": 10,
+    "total": 10,
+    "per_action": {
+     "ReleaseLock": 1,
+     "AcquireLock": 1
+    }
+   },
+   "p2": {
+    "success": true,
+    "classification": null,
+    "distinct_states": 1
+   },
+   "p4": {
+    "held": 3,
+    "total": 3,
+    "failed": []
+   }
+  }
+ }
+}
