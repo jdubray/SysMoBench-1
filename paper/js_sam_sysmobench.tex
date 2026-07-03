@@ -59,8 +59,9 @@ unanimous, one pass provably vacuous), and one round of trace feedback
 repairs some specifications completely --- audited as root-cause fixes, not
 memorization. JavaScript reaches an evaluable artifact 4/4 times versus 1/4
 for \tlaplus{}, a gap of guardrails rather than capability. A
-pre-registered, paired, controlled comparison --- completed to a full
-$2{\times}2$ factorial in (contract, prompt) after review --- then resolves
+pre-registered, paired, controlled comparison --- completed after review to
+a full $3{\times}2$ factorial: contract (SAM / lean / \tlaplus{}) $\times$
+prompt (with / without spec-level semantics) --- then resolves
 the language question in an unexpected place: the specification
 \emph{contract} is the dominant, uniform factor. A bare
 \texttt{next(state, action, model)} function, structurally isomorphic to the
@@ -157,8 +158,8 @@ spinlock~\cite{asterinas}):
   failure attributed to a specific structural cause.
 \item \textbf{A controlled cross-language conformance study}
   (\S\ref{sec:crosslang}): a pre-registered, paired design, completed after
-  review to a full $2{\times}2$ factorial in (contract, prompt) plus a
-  \tlaplus{} reference ($N{=}5$ generations per cell), pinning both languages
+  review to a full $3{\times}2$ factorial in (contract, prompt)
+  ($N{=}5$ generations per cell), pinning both languages
   to the same observable-state contract and replaying the same trace corpus
   mechanically in both. The completed factorial attributes the conformance
   gap to the SAM contract's machinery --- not to the JavaScript language, not
@@ -637,7 +638,10 @@ Opus and Sonnet both modeled ``no lock owner'' as
 \texttt{NULL == CHOOSE v : v \textbackslash notin Threads}. SANY accepts
 this --- syntax passes --- but TLC cannot evaluate an unbounded
 \texttt{CHOOSE}, so model checking fails. The idiom is natural, looks
-correct, and is a well-known TLC trap. JavaScript has a native \texttt{null},
+correct, and is a well-known TLC trap --- though the indictment is of LLM
+\tlaplus{} fluency rather than of the language: no experienced \tlaplus{}
+author models absence this way, and agentic workflows already write around
+it in practice~\cite{specula}. JavaScript has a native \texttt{null},
 so the corresponding \jssam{} specifications express the same concept with no
 trap available to fall into. This structural hazard caught two of four
 models, \emph{including the model with the best \jssam{} conformance score}
@@ -731,7 +735,8 @@ deployed \jssam{} prompt does not: a difference in prompt content, not in
 language. And even with prompts equalized, the two substrates still differ in
 a second way --- the SAM contract obliges an executable module with
 proposal/acceptor wiring and auxiliary state, while the \tlaplus{}
-specification is a bare two-variable relation. We therefore ran four arms:
+specification is a bare two-variable relation. We therefore ran four arms
+initially:
 \textbf{JS(deployed)} --- the shipped \jssam{} prompt;
 \textbf{JS(constrained)} --- the deployed prompt plus the \emph{identical}
 semantics block used by the \tlaplus{} arm;
@@ -755,7 +760,12 @@ the missing cell --- \textbf{plain-JS(no-semantics)}: the identical lean
 contract (module shape, two observable keys, action names, data schema, and
 a description of the replay \emph{mechanism}) with the entire single-step
 semantics block removed, so the model must derive the transition semantics
-from the Rust source alone.
+from the Rust source alone. A mirrored \tlaplus{} derivation arm (the
+constrained \tlaplus{} contract, semantics block likewise removed) was added
+alongside it, completing the $3{\times}2$ of Table~\ref{tab:crosslang}; its
+result --- the study's only cross-language split --- responds to a
+review-identified limitation and is reported with that audit trail in
+\S\ref{sec:limitations}.
 
 \paragraph{Replication, pairing, and checkability.}
 $N{=}5$ generations per model per arm (80 in total), all scored per-window on
@@ -829,7 +839,7 @@ Adding the same semantics block to the JavaScript prompt --- changing nothing
 else --- moved Fable from 57.9\% to 95.7\% and Sonnet from 50.0\% to a
 perfect 100\%. Had we reported the two-arm run, the headline would have been
 a decisive language reversal, and an earlier draft accordingly read ``most of
-that effect was the prompt.'' The completed $2{\times}2$ shows that reading
+that effect was the prompt.'' The completed factorial shows that reading
 was an artifact of examining only the SAM column: at the generation level the
 within-SAM prompt effect is significant for exactly those two models (Fable
 $\Delta{=}.379$, $p{=}.024$; Sonnet $\Delta{=}.500$, $p{=}.0079$) and not for
@@ -1047,7 +1057,11 @@ specification far more often (4/4 vs.\ 1/4), and evaluability is the
 precondition for everything else. The strong form --- that familiarity yields
 more \emph{faithful} models --- resolves to a tie once like is compared with
 like: JavaScript in the shape of the \tlaplus{} relation matches \tlaplus{}
-at 100\% for every model. What the three-arm data made look like a language
+at 100\% for every model. (The one cross-language split, in the derivation
+arms, favors lean JS and traces to the lean contract's totality against
+\tlaplus{}'s guard idiom --- not to the language; scored conditionally, the
+tie holds there too; \S\ref{sec:limitations}.) What the three-arm data made
+look like a language
 effect was the specification contract: every layer of machinery between the
 semantics and the artifact --- proposals, acceptors, auxiliary state --- is
 surface on which transcription slips, and the tax falls hardest on the
@@ -1298,8 +1312,10 @@ self-correction axis that one-shot scores conceal --- capable models repair
 fully and verifiably (a held-out audit found root-cause fixes, not memorized
 windows), the weakest not at all; the same
 models that reach an evaluable specification in JavaScript 4/4 times manage
-it in \tlaplus{} 1/4 times, for two identifiable structural reasons; and
-under a pre-registered, paired comparison completed to a full $2{\times}2$
+it in \tlaplus{} 1/4 times --- for two identified causes, one of them a
+harness fault, both later removed entirely by a one-line prompt guardrail:
+a default-prompt robustness gap, not a language-capability one; and
+under a pre-registered, paired comparison completed to a full $3{\times}2$
 factorial in (contract, prompt), the faithfulness question resolves in an
 unexpected place --- the conformance gap is attributable to the SAM
 contract's machinery, not to JavaScript, not to formality, and not primarily
@@ -1321,7 +1337,11 @@ within the SAM contract, but moved Opus and Haiku insignificantly --- and at
 the lean contract it had nothing left to move (a ceiling at which effect
 ordering among the perfect cells is, we note, not identifiable). Every layer
 of ceremony between the semantics and the artifact cost conformance; the
-language itself, once shape was matched, contributed nothing measurable. On the practical question --- can JavaScript replace
+language itself, once shape was matched, contributed nothing measurable
+(the derivation-mode split between lean JS and \tlaplus{} traces to
+contract totality, not language: scored conditionally, the guard-idiom
+\tlaplus{} specifications are perfect on every scoreable window). On the
+practical question --- can JavaScript replace
 \tlaplus{}? --- the evidence splits cleanly. For LLM-generated conformance
 modeling at this scale: yes --- interchangeable on fidelity \emph{on what we
 measured}, which is conformance to a two-variable observable projection of
@@ -1351,11 +1371,12 @@ specification shape from demonstration to backend: with model-generated
 lean specifications passing all phases 40/40 across both tasks, the
 remaining question is purely integration --- a first-class lean backend, a
 hybrid where the model writes only the pure core and the harness generates
-the SAM scaffolding, or the documented status quo; (2)~a derivation-level
-comparison --- both languages, \emph{no} semantics block, on a task whose
-semantics cannot be guessed from the action names --- now unblocked by the
-\texttt{locksvc} harness and still the decisive open test of the
-familiarity claim; (3)~a prompt-prescriptiveness
+the SAM scaffolding, or the documented status quo; (2)~derivation at
+depth: with the \texttt{spin} derivation arms now run, the decisive open
+test moves to a task whose semantics cannot be guessed from the action
+names --- the \texttt{locksvc} factorial (its SAM and \tlaplus{} arms are
+scoped in the replication guide) and, beyond it, a consensus-class
+protocol; (3)~a prompt-prescriptiveness
 dose--response study, treating the semantics block as the manipulated
 variable rather than a nuisance; (4)~an as-deployed agent-path arm beside
 the controlled replay, for ecological validity; (5)~a \tlaplus{} repair
@@ -1400,7 +1421,11 @@ the methodology note
 requests against \url{https://github.com/specula-org/SysMoBench}.
 Requirements: Docker, Node $\geq$ 20, Python 3, and (for the \tlaplus{} arm)
 Java with \texttt{tla2tools}. A single script reproduces the kernel capture:
-\texttt{scripts/harness/spin/run.sh}.
+\texttt{scripts/harness/spin/run.sh}. A replication guide
+(\texttt{REPLICATION.md}, repository root) re-derives every analysis from
+committed raw data without API access, regenerates every experiment from
+pinned prompts and models, and inventories the experimenter-authored
+materials as independent variables to audit or vary.
 
 \begin{thebibliography}{10}
 \small
