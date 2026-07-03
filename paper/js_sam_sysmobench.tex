@@ -746,12 +746,19 @@ the contract.
 
 \paragraph{Replication, pairing, and checkability.}
 $N{=}5$ generations per model per arm (80 in total), all scored per-window on
-the same 28-window kernel corpus. The design is naturally paired --- for each
-model, every window has an outcome in every arm --- so we report per-model
-McNemar tests (continuity-corrected, $\chi^2 > 3.84 \Rightarrow p < 0.05$)
-rather than comparing noisy means. The pre-registered checkability policy
-(conditional vs.\ unconditional scoring) proved moot: \emph{zero} windows
-were unscoreable in any constrained or plain-JS generation.
+the same 28-window kernel corpus. The pre-registered analysis was a pooled
+per-window McNemar test; review correctly identified that as
+\emph{pseudo-replicated} --- generations collapse to 1--2 unique behavioral
+fingerprints per (model, arm), so pooling $5\times28$ windows counts the same
+underlying defect up to five times and inflates any $\chi^2$. The analysis of
+record is therefore at the generation level: we report per-arm uniqueness
+counts and an exact two-sided permutation test with the \emph{generation} as
+the unit (statistic: difference in mean per-generation pass rate; all
+$\binom{10}{5}=252$ relabelings; the smallest attainable $p$ is
+$2/252\approx0.0079$, so starred results sit at the test's floor). The
+pre-registered checkability policy (conditional vs.\ unconditional scoring)
+proved moot: \emph{zero} windows were unscoreable in any constrained or
+plain-JS generation.
 
 \subsection{Results}
 
@@ -776,20 +783,24 @@ Claude Haiku 4.5  & 28.6\% & 40.7\%          & \textbf{100\%} & \textbf{100\%} \
 
 \begin{table}[ht]
 \centering
-\caption{Paired McNemar over windows, aggregated across generations
-($b$ = JS-only pass, $c$ = \tlaplus{}-only pass; $^{*}$ = $p<0.05$). The
-plain-JS arm is a perfect per-window tie with \tlaplus{} for every model
-($b{=}0$, $c{=}0$, $\chi^2{=}0.0$) and is omitted from the table.}
+\caption{Generation-level analysis (replaces a pooled per-window McNemar
+table that review identified as pseudo-replicated; those $\chi^2$ values are
+retracted). ``Unique'' = distinct behavioral fingerprints (per-window outcome
+vectors) among the 5 generations of each arm, ordered deployed-JS /
+constrained-JS / plain-JS / \tlaplus{}. $\Delta$ = difference in mean
+per-generation pass rate vs.\ \tlaplus{}; $p$ from the exact permutation test
+($^{*}$ = $p<0.05$; $0.0079$ is the smallest attainable value). The plain-JS
+arm is omitted: it ties \tlaplus{} in every generation ($\Delta{=}0$, $p{=}1$).}
 \label{tab:mcnemar}
 \small
-\begin{tabular}{lcc}
+\begin{tabular}{lccc}
 \toprule
-Model & JS(deployed) vs.\ TLA & JS(constrained) vs.\ TLA \\
+Model & Unique (dep/con/plain/\tlaplus{}) & JS(deployed) vs.\ TLA & JS(constrained) vs.\ TLA \\
 \midrule
-Opus 4.8   & $b{=}0$, $c{=}26$, $\chi^2{=}24.0^{*}$  & $b{=}0$, $c{=}15$, $\chi^2{=}13.1^{*}$ \\
-Fable 5    & $b{=}0$, $c{=}59$, $\chi^2{=}57.0^{*}$  & $b{=}0$, $c{=}6$,  $\chi^2{=}4.2^{*}$  \\
-Sonnet 4.6 & $b{=}0$, $c{=}70$, $\chi^2{=}68.0^{*}$  & $b{=}0$, $c{=}0$,  $\chi^2{=}0.0$      \\
-Haiku 4.5  & $b{=}0$, $c{=}100$, $\chi^2{=}98.0^{*}$ & $b{=}0$, $c{=}83$, $\chi^2{=}81.0^{*}$ \\
+Opus 4.8   & 2/1/1/1 & $\Delta{=}.186$, $p{=}.0079^{*}$ & $\Delta{=}.107$, $p{=}.0079^{*}$ \\
+Fable 5    & 2/2/1/1 & $\Delta{=}.421$, $p{=}.0079^{*}$ & $\Delta{=}.043$, $p{=}.44$ \\
+Sonnet 4.6 & 1/1/1/1 & $\Delta{=}.500$, $p{=}.0079^{*}$ & $\Delta{=}0$, $p{=}1$ \\
+Haiku 4.5  & 1/2/1/1 & $\Delta{=}.714$, $p{=}.0079^{*}$ & $\Delta{=}.593$, $p{=}.0079^{*}$ \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -809,19 +820,23 @@ large enough to masquerade as a language effect.
 \paragraph{A real, one-directional residual survives the prompt control.}
 With identical semantics in both prompts, \tlaplus{} reaches 100\%
 conformance for \emph{every model and every generation}, while constrained
-\jssam{} does so only for Sonnet. The residual is statistically significant
-for Opus, Fable, and Haiku, vanishes for Sonnet, and is largest for the
-weakest model (Haiku: 40.7\% vs.\ 100\%). Moreover $b{=}0$ in every
-comparison: no \jssam{} specification ever passed a window that its
-\tlaplus{} counterpart failed. (When one arm is at 100\% this is partly
-structural --- see \S\ref{sec:limitations} --- but the direction is uniform
-in the deployed arm as well.)
+\jssam{} does so only for Sonnet. At the generation level the residual is
+significant for Opus and Haiku (both at the permutation floor,
+$p{=}.0079$), vanishes for Sonnet, and for Fable is \emph{not} significant
+($\Delta{=}.043$, $p{=}.44$) --- the pooled McNemar had starred Fable's
+deficit, and that specific claim was pseudo-replication, now withdrawn. The
+residual is largest for the weakest model (Haiku: 40.7\% vs.\ 100\%), and
+the direction is uniform: descriptively, no \jssam{} specification ever
+passed a window that its \tlaplus{} counterpart failed, in any arm. (When
+one arm is at 100\% this is partly structural --- see
+\S\ref{sec:limitations} --- but the direction is uniform in the deployed arm
+as well, where the gap is significant for all four models.)
 
 \paragraph{The plain-JS arm locates the residual: it is the contract, not
 the language.}
 The fourth arm ties \tlaplus{} at 100\% for every model and every generation
---- $b{=}0$, $c{=}0$, $\chi^2{=}0.0$ for all four models: perfect per-window
-ties across all paired generation-sets. Haiku is the cleanest single datum:
+--- identical per-window outcomes in every paired generation-set
+($\Delta{=}0$; no test needed). Haiku is the cleanest single datum:
 the weakest model, which reaches only 40.7\% through SAM's machinery,
 expresses the identical semantics perfectly as a bare transition function
 --- in the same language. Three attributions fall out.
@@ -959,7 +974,7 @@ the granularity of individual actions within a 100-line system.
 
 \paragraph{Repair belongs in the evaluation loop.}
 The repair experiment suggests that single-shot leaderboard scores understate
-some models (Fable) and overstate the ceiling of others (Sonnet, Haiku). Since
+some models (Fable) and overstate the ceiling of others (Haiku). Since
 practical formal-modeling deployments will be agentic loops with exactly this
 kind of counterexample feedback, benchmarks arguably should report both axes.
 The repair driver we contribute makes the second axis cheap to measure for
@@ -1038,11 +1053,17 @@ We state these plainly; the study is a case study and should be read as one.
   --- a 31-state space, 11/20 unique solutions, 20/20 passing ---
   generalizing the contract-tax removal across tasks of this scale, though
   not yet to large distributed protocols.
-\item \textbf{$b{=}0$ is partly structural.} When the \tlaplus{} arm passes
-  every window it fails none, so a JS-only pass is impossible by
-  construction; the McNemar then reduces to whether the \jssam{} failure
-  count is significant. We report it for completeness, not as an independent
-  directional finding.
+\item \textbf{$b{=}0$ is partly structural, and the effective sample is
+  small.} When the \tlaplus{} arm passes every window it fails none, so a
+  JS-only pass is impossible by construction; any paired comparison reduces
+  to whether the \jssam{} failure count is significant. Moreover the
+  generations collapse to 1--2 unique behavioral fingerprints per (model,
+  arm) --- the pooled window-level McNemar we originally reported counted the
+  same defect up to five times, and its $\chi^2$ values are retracted in
+  favor of the generation-level permutation test of
+  Table~\ref{tab:mcnemar}. At the strictest unit (the unique solution,
+  $n{=}1$--$2$ per cell) no significance test is meaningful; the
+  per-solution effect sizes stand on their own.
 \item \textbf{The direct TLC replay is the controlled condition, not the
   deployed one.} The benchmark ships an agent-mediated \tlaplus{} Phase 3;
   pinning spec variables to the trace schema trades realism for

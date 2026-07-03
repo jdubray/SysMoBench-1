@@ -92,10 +92,13 @@ conditional comparison is the genuinely open question.
 Variance matters here because the headline is a language difference. We run **N=5**
 generations per model per arm (spinlock specs are short, so this is cheap). The
 design is naturally **paired**: for each model, each of the 28 windows receives an
-outcome in every arm, so we report per-model paired differences (McNemar over
-windows, aggregated across generations) rather than comparing two noisy means. We
-report `b` (first-arm-only pass), `c` (second-arm-only pass), and the
-continuity-corrected χ² (df=1; χ² > 3.84 ⇒ p < 0.05).
+outcome in every arm. *(Revised after review: the original plan pooled windows
+across generations into a McNemar test — pseudo-replication, since generations
+collapse to 1–2 unique behavioral fingerprints per arm, so the same defect gets
+counted up to five times and the χ² is inflated. The analysis of record is per-arm
+uniqueness counts plus an exact generation-level permutation test — unit =
+generation, statistic = difference in mean pass rate, all C(10,5)=252 relabelings,
+two-sided, minimum attainable p ≈ 0.0079. See `scripts/tla_phase3_analysis.py`.)*
 
 ### 2.5 A four-arm design that isolates prompt, language, and pattern
 
@@ -155,10 +158,12 @@ language and not "formal vs informal." (It does — see §7.)
   modeling. The deployed-JS arm is the closer proxy for "derive it yourself," and
   its gap is much larger — so the effect size depends heavily on how much the
   prompt hands over.
-- **`b = 0` is partly structural.** When one arm scores 100% it fails no windows,
-  so "other-arm-only pass" is impossible by construction; the McNemar then reduces
-  to whether the other arm's failure count is significant. We report it for
-  completeness, not as an independent directional finding.
+- **`b = 0` is partly structural, and the effective sample is small.** When one
+  arm scores 100% it fails no windows, so "other-arm-only pass" is impossible by
+  construction; any paired comparison reduces to whether the other arm's failure
+  count is significant — assessed at the generation level, not over pooled
+  windows. At the strictest unit (unique solutions, n=1–2 per cell) only effect
+  sizes are meaningful.
 - **Direct vs as-deployed replay.** The direct TLC path is the controlled
   condition; it is not what the benchmark ships. Running both arms (direct +
   agent) is the way to report both the controlled effect and ecological validity.
@@ -195,8 +200,10 @@ Phase-3 mode as a first-class controlled condition alongside the agent path.
   `.../plain-js/direct_call.txt` (plain-JS).
 - Replay paths: `scripts/tla_direct_tv.py` (direct TLC), `scripts/plain_js_tv.py`
   + `tools/plain-js/tv.mjs` (sandboxed plain-JS).
-- Paired driver (four arms, N=5, McNemar): `scripts/tla_phase3_study.py`
-  (resumable; raw per-window data in `output/tla_phase3_study.json`).
+- Paired driver (four arms, N=5): `scripts/tla_phase3_study.py`
+  (resumable; raw per-window data in `output/tla_phase3_study.json`);
+  generation-level analysis (uniqueness + exact permutation test):
+  `scripts/tla_phase3_analysis.py`.
 - Corpus + capture harness: `data/sys_traces/spin/`, `scripts/harness/spin/run.sh`.
 - Design + pre-registration: `docs/js_sam_tla_phase3_plan.md`;
   results: `docs/js_sam_tla_phase3_results.md`.
@@ -218,7 +225,7 @@ Reading the arms in order:
 1. **Prompt** explains most of the raw reversal — the semantics block alone lifts
    JS-SAM sharply (Fable 58→96%, Sonnet 50→100%).
 2. **Language** does *not* explain the residual — plain-JS ties TLA+ at 100% for
-   every model (`plain-JS` vs `TLA`: b=0, c=0, χ²=0 for all four).
+   every model (identical outcomes in every generation; Δ=0, no test needed).
 3. **The SAM pattern's machinery** is the whole residual: the same JavaScript, in a
    minimal declarative `next()` shape, is perfect; wrapped in SAM's
    proposals/acceptors + mandatory auxiliary state, it is not (Haiku 40.7% → 100%).

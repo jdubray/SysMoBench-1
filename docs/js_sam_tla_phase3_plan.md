@@ -30,8 +30,12 @@ experiment removes that confound.
    Optionally one symmetric repair round per language.
 4. **Kill the single-sample problem.** N=5 generations per model per language
    (40 total). Naturally paired: for each model, every one of the 28 windows has
-   a JS-SAM outcome and a TLA+ outcome ⇒ report per-model paired differences
-   (sign/McNemar over windows, aggregated across generations), not two noisy means.
+   a JS-SAM outcome and a TLA+ outcome ⇒ report per-model paired differences.
+   *(Post-hoc revision: this step's original "sign/McNemar over windows,
+   aggregated across generations" was pseudo-replicated — generations collapse
+   to 1–2 unique behaviors, so pooled windows are not independent. The analysis
+   of record is a generation-level exact permutation test plus per-arm
+   uniqueness counts; see `scripts/tla_phase3_analysis.py` and the results doc.)*
 5. **Pre-commit the interpretation.** Three publishable outcomes:
    - JS-SAM conformance ≫ TLA+ → host-language familiarity affects modeling
      fidelity, not just checkability (strong hypothesis).

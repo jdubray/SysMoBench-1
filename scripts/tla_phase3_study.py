@@ -166,7 +166,7 @@ def main():
             row.append(f"{uncond(flat):.1f}%" if flat else "n/a")
         print(f"{model:8s} {row[0]:>9s} {row[1]:>11s} {row[2]:>8s} {row[3]:>12s}")
 
-    print("\n===== PAIRED McNemar over windows (b=first-only pass, c=TLA-only pass) =====")
+    print("\n===== DESCRIPTIVE window discordance (b=first-only pass, c=TLA-only pass) =====")
     print("JS(constr) vs TLA isolates the language; plainJS vs TLA isolates SAM's machinery.")
     print(f"{'model':8s} {'JS(constr) vs TLA':>20s} {'plainJS vs TLA':>18s}")
     for model in args.models:
@@ -176,11 +176,16 @@ def main():
             xa, xb = flat(a), flat(b_lang)
             if not xa or not xb or len(xa) != len(xb):
                 return "n/a"
-            bb, cc, st = mcnemar(xa, xb)
-            sig = "*" if st > 3.84 else " "
-            return f"b={bb} c={cc} chi2={st:.1f}{sig}"
+            bb, cc, _st = mcnemar(xa, xb)
+            return f"b={bb} c={cc}"
         print(f"{model:8s} {cell('jsc','tla'):>20s} {cell('pjs','tla'):>18s}")
-    print("\n(* => paired difference significant at p<0.05, df=1. b=first-only pass, c=TLA-only pass.)")
+    print(
+        "\nNOTE: b/c are DESCRIPTIVE only. Pooling windows across generations is"
+        "\npseudo-replicated (generations collapse to 1-2 unique behavioral"
+        "\nfingerprints per arm), so no chi-square is reported here. For inference"
+        "\nrun scripts/tla_phase3_analysis.py: uniqueness per arm + an exact"
+        "\ngeneration-level permutation test."
+    )
 
 
 if __name__ == "__main__":
