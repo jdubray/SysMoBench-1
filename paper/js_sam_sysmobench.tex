@@ -1090,10 +1090,31 @@ We state these plainly; the study is a case study and should be read as one.
   preserved, individual scores moving by up to $\sim$8 points --- but the
   repair-loop and checkability experiments have not been replicated and
   should be read with that error bar.
-\item \textbf{28 trace windows from two deterministic scenarios.} Contention
-  is expressed via \texttt{try\_lock} on a single CPU; true SMP interleavings
-  and a blocking waiter's wakeup are not represented. The corpus is faithful
-  to real kernel executions but does not exhaust the lock's behavior.
+\item \textbf{Trace coverage is the quiet weakness of every conformance
+  number here} (audited: \texttt{scripts/trace\_coverage\_audit.py}). The
+  \texttt{spin} corpus is 28 windows from \emph{two hand-authored
+  deterministic scenarios}, covering 8 of the 18 observable
+  (pre-state, action, data) combinations; contention is expressed only via
+  \texttt{try\_lock} (2 combos), and the corpus contains \emph{zero} windows
+  of a blocking \texttt{lock()} observed while the lock is held --- the
+  instrumentation emits the acquire event at acquisition success, where the
+  pre-state is free, so the spin phase (the behavior the primitive is named
+  for) is invisible in this two-variable projection by construction: a woken
+  blocking waiter is indistinguishable from an uncontended acquire. The
+  \texttt{locksvc} corpus is one fixed terminating workload (three one-shot
+  clients; exactly 12 windows per run by protocol completion, hence the
+  exactly-15-per-action count) sampled under five schedules --- genuinely
+  distinct (5/5 different action sequences, four different grant orders,
+  including the network reordering that exposed the fold bug), but with no
+  re-requests, no deeper contention, and no failure paths. The
+  vector-clock reorder's causal premise is \emph{verified per event} at
+  corpus build, not assumed: every \texttt{CriticalSection} step reads
+  \texttt{GrantMsg} from its mailbox (message-passing happens-before), and
+  the builder refuses traces where that check fails. Net: every 100\% in
+  this paper means conformance to a two-variable projection of an easy,
+  deterministic slice of each system's behavior --- faithful to real
+  executions, far from exhausting them --- and the conclusion carries this
+  qualifier explicitly.
 \item \textbf{The \tlaplus{} comparison mixes causes.} The 1/4-vs-4/4 result
   bundles a genuine model-attributable pitfall (unbounded \texttt{CHOOSE},
   2/4) with a harness shortfall (config generation, 1/4). We report the
@@ -1255,9 +1276,14 @@ ordering among the perfect cells is, we note, not identifiable). Every layer
 of ceremony between the semantics and the artifact cost conformance; the
 language itself, once shape was matched, contributed nothing measurable. On the practical question --- can JavaScript replace
 \tlaplus{}? --- the evidence splits cleanly. For LLM-generated conformance
-modeling at this scale: yes, interchangeably on fidelity, and with fewer
-operational failure modes (no \texttt{CHOOSE} trap, no configuration
-artifact). For deep verification: no --- TLC's temporal properties,
+modeling at this scale: yes --- interchangeable on fidelity \emph{on what we
+measured}, which is conformance to a two-variable observable projection of
+deterministic, easy slices of each system's behavior
+(\S\ref{sec:limitations}); neither language has been tested on uncovered
+combinations, projection-invisible behavior such as the blocking spin,
+richer workloads, or adversarial interleavings. Within that measured slice
+the tie is exact, and JavaScript carries fewer operational failure modes (no
+\texttt{CHOOSE} trap, no configuration artifact). For deep verification: no --- TLC's temporal properties,
 liveness checking, and large-state model checking have no equivalent in
 either bounded safety explorer used here (the SAM library's checker or its
 40-line generic replacement), and remain \tlaplus{}'s distinctive value. The search

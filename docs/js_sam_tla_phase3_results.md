@@ -68,6 +68,38 @@ which was an artifact of examining only the SAM column:
   without semantics while the semantics block within SAM is not (3 of 4 models
   below 100%).
 
+## Trace coverage — the qualifier every conformance number carries (added after review)
+
+Audited by `scripts/trace_coverage_audit.py`:
+
+- **Provenance:** two hand-authored deterministic ktest scenarios
+  (`test_spin_2thread`, `test_spin_seq`); no randomized or adversarial schedules.
+- **Combo coverage:** 8 of 18 observable (pre, action, data) combos. The 10
+  uncovered combos are all observable no-ops (see the held-out set of the repair
+  audit).
+- **Contention shape:** try-on-held only (2 combos). The corpus contains **zero
+  windows of a blocking `lock()` observed while the lock is held** — the
+  instrumentation emits the acquire event at acquisition *success* (pre = free),
+  so the spin phase, the behavior the primitive is named for, is invisible in
+  this two-variable projection *by construction*: a woken blocking waiter is
+  indistinguishable from an uncontended acquire.
+- **locksvc:** one fixed terminating workload (3 one-shot clients → exactly 12
+  windows/run by protocol completion, hence exactly 15/action over 5 runs). The
+  five runs are genuinely distinct schedules (5/5 different action sequences,
+  4 distinct grant orders, including the network reordering that exposed the
+  fold bug) — but there are no re-requests, no deeper contention, no failure
+  paths. The vector-clock reorder's premise is **verified per event at corpus
+  build** (every CriticalSection step reads GrantMsg from its mailbox —
+  message-passing happens-before; the builder refuses traces failing the check),
+  not assumed.
+
+**So every 100% in this document means:** conformance to a two-variable
+projection of an easy, deterministic slice of each system's behavior, on the
+combos those schedules reach. It is evidence of exact transcription of that
+slice — not of uncovered combos, projection-invisible behavior, richer
+workloads, or adversarial interleavings. Claims like "plain-JS ties TLA+" and
+"interchangeable on fidelity" carry this qualifier.
+
 ## Corpus base rate (added after review)
 
 6 of the 28 windows (all contention acquires) have **post = pre**: a no-op

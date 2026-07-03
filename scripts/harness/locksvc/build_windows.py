@@ -87,10 +87,39 @@ def target_actions(raw_path: Path):
                     break
 
 
+def validate_cs_consumed_grant(raw_path: Path):
+    """Demonstrate (not assume) the causal premise of the reorder below: every
+    CriticalSection event must show the client READING GrantMsg (=3) from its
+    network mailbox inside that step — message-passing evidence that some
+    serverRespond's grant write happens-before the CS. Raises if any CS event
+    lacks it, so a corpus can never be built on an unverified assumption."""
+    for line in raw_path.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        raw = json.loads(line)
+        if raw.get("isAbort"):
+            continue
+        cs = raw.get("csElements", [])
+        pc = next((e for e in cs if e.get("tag") == "write"
+                   and e.get("name", {}).get("name") == ".pc"), None)
+        if pc is None or pc["oldValue"].strip('"') != "AClient.criticalSection":
+            continue
+        reads = [e for e in cs if e.get("tag") == "read"
+                 and e.get("name", {}).get("name") == "network"]
+        if not any(str(e.get("value")).strip() == str(GRANT_MSG) for e in reads):
+            raise ValueError(
+                f"{raw_path}: CriticalSection event (pid {raw.get('self')}) did not "
+                f"read GrantMsg={GRANT_MSG} — the grant-before-CS reorder premise "
+                "does not hold for this trace; refusing to build windows from it."
+            )
+
+
 def _repair_grant_before_cs(events):
     """Move each ServerGrantLock(c) to just before that client's CriticalSection when
-    the log records them inverted (empty-vclock artifact). Causally sound: a client
-    cannot enter its critical section without first receiving the grant."""
+    the log records them inverted (empty-vclock artifact). Causally sound AND
+    verified per-event by validate_cs_consumed_grant(): each CriticalSection step
+    reads GrantMsg from the network, so the grant write happens-before it."""
     events = list(events)
     for c in {cid for a, cid in events if a == "ClientCriticalSection"}:
         gl = next((i for i, (a, cid) in enumerate(events)
@@ -133,6 +162,7 @@ def main():
     out_dir.mkdir(parents=True, exist_ok=True)
     total = 0
     for i, raw in enumerate(sys.argv[2:], start=1):
+        validate_cs_consumed_grant(Path(raw))  # verified premise for the reorder
         windows = fold(list(target_actions(Path(raw))))
         out_path = out_dir / f"locksvc_run{i:02d}.ndjson"
         with out_path.open("w", encoding="utf-8") as f:
