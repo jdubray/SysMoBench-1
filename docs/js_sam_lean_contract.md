@@ -41,7 +41,13 @@ explorer instead:
 - **Phase 2 (bounded exploration)** and **Phase 4 (invariants)** —
   `tools/plain-js/explore.mjs` BFS-explores `init`/`next` over the action domain,
   checking crashes / determinism / serializable state (Phase 2) and safety
-  predicates over reachable states (Phase 4).
+  predicates over reachable states (Phase 4). It also supports **bounded
+  progress checks** (EF-reachability: from every reachable state satisfying a
+  premise, a goal state must be reachable within the bound). These catch defect
+  classes safety invariants provably cannot — a never-releasing lock satisfies
+  mutual exclusion *because* it is broken, but fails `ReleaseProgress`; an inert
+  spec fails `AcquireProgress`. They are not liveness checks (no fairness,
+  bounded horizon) and are labeled as such.
 - **Phase 3 (transition validation)** — `tools/plain-js/tv.mjs` replays the trace
   windows through `next` (`scripts/plain_js_tv.py`).
 
@@ -51,10 +57,15 @@ reference spec:
 ```
 $ python scripts/lean_demo.py
 [Phase 2 runtime]      PASS — 18 steps, 3 unique states, classification=None
-[Phase 4 invariants]   PASS — 3/3 hold
+[Phase 4 safety]       PASS — 3/3 hold
+[Phase 4 progress (bounded EF, not liveness)]  PASS — 2/2 hold
 [Phase 3 transitions]  28/28 = 100.0%
 Lean contract runs the full pipeline: ALL PHASES PASS
 ```
+
+(All 40 saved model-generated lean specs — 20 spin, 20 locksvc — also pass the
+progress checks, so the strengthened Phase 4 hardens rather than overturns the
+20/20 results below.)
 
 ### Demonstrated on model-generated specs (N=5, four models)
 

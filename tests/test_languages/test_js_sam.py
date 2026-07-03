@@ -230,6 +230,37 @@ class TestPhase4Invariants:
         assert not outcome.cases[0].success
         assert "No translated invariant" in outcome.cases[0].error_message
 
+    def test_safety_only_phase4_passes_a_never_releasing_lock(self, backend, tmp_path):
+        """CHARACTERIZATION of a documented weakness, not desired behavior: the
+        shipped Phase-4 invariant set is safety-only, and a never-releasing lock
+        satisfies every one of them BECAUSE it is broken (mutual exclusion holds
+        trivially when the lock never changes hands). Phase 4 as implemented
+        cannot fail this defect class in principle; the discriminating
+        properties are liveness, which the bounded checker does not verify.
+        If this test ever fails, Phase 4 gained a real capability — update
+        docs/js_sam_vs_tla_comparison.md accordingly."""
+        import yaml
+        tpl_file = PROJECT_ROOT / "data" / "js_sam_invariant_templates" / "spin" / "invariants.yaml"
+        tpl = yaml.safe_load(tpl_file.read_text(encoding="utf-8"))
+        templates = [
+            InvariantTemplate(
+                name=i["name"], type=i["type"],
+                natural_language=i["natural_language"],
+                formal_description=i["formal_description"],
+                example=i["javascript_example"],
+            )
+            for i in tpl["invariants"]
+        ]
+        translated = {i["name"]: i["javascript_example"].strip() for i in tpl["invariants"]}
+        outcome = backend.check_invariants(
+            SPECS / "spin-neverrelease.js", None, templates, translated, tmp_path, timeout=300
+        )
+        assert all(c.success for c in outcome.cases), (
+            "Phase 4 unexpectedly FAILED the never-releasing lock — the "
+            "safety-only weakness may have been fixed; update the docs."
+        )
+        assert len(outcome.cases) == 3
+
 
 class TestTranslationParsing:
     def _templates(self):

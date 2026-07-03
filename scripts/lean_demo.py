@@ -37,20 +37,27 @@ def main():
     spec = Path(args.spec) if args.spec else cfg["reference"]
     print(f"Task: {args.task}   Lean spec: {spec}\n")
 
-    # Phases 2 & 4 — bounded exploration + invariants (no SAM).
-    rep = plain_js_explore(spec, cfg["actions"], cfg["invariants"], depth_max=8)
+    # Phases 2 & 4 — bounded exploration + safety invariants + bounded progress.
+    rep = plain_js_explore(spec, cfg["actions"], cfg["invariants"], depth_max=8,
+                           progress=cfg.get("progress"))
     if not rep.get("ok"):
         print(f"[Phase 2/4] FAILED to explore: {rep.get('error')}")
         return
     p2_ok = rep.get("classification") is None
     p4_viol = rep.get("invariantViolations") or {}
+    prog_viol = rep.get("progressViolations") or {}
     ninv = len(cfg["invariants"])
+    nprog = len(cfg.get("progress") or [])
     print(f"[Phase 2 runtime]  {'PASS' if p2_ok else 'FAIL'} — "
           f"{rep['statesExplored']} steps, {rep['uniqueStates']} unique states, "
           f"classification={rep.get('classification')}")
-    print(f"[Phase 4 invariants]  {'PASS' if not p4_viol else 'FAIL'} — "
+    print(f"[Phase 4 safety]  {'PASS' if not p4_viol else 'FAIL'} — "
           f"{ninv - len(p4_viol)}/{ninv} hold"
           + (f"; violations={p4_viol}" if p4_viol else ""))
+    print(f"[Phase 4 progress (bounded EF, not liveness)]  "
+          f"{'PASS' if not prog_viol else 'FAIL'} — "
+          f"{nprog - len(prog_viol)}/{nprog} hold"
+          + (f"; violations={prog_viol}" if prog_viol else ""))
 
     # Phase 3 — transition validation over the real trace corpus.
     windows = load_trace_windows(args.task)
@@ -59,7 +66,7 @@ def main():
     print(f"[Phase 3 transitions]  {passed}/{len(windows)} = {100*passed/len(windows):.1f}%  "
           f"(fail={statuses.count('fail')} unscoreable={statuses.count('unscoreable')})")
 
-    all_ok = p2_ok and not p4_viol and passed == len(windows)
+    all_ok = p2_ok and not p4_viol and not prog_viol and passed == len(windows)
     print(f"\nLean contract runs the full pipeline: {'ALL PHASES PASS' if all_ok else 'see above'}")
 
 

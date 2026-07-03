@@ -73,10 +73,12 @@ are different axes: the model with the categorical release defect repairs to
 fixes, not memorized windows --- while the weakest model cannot use the
 feedback at all.
 Third, on the same task and models, 4/4 \jssam{} specifications are
-end-to-end checkable versus 1/4 for \tlaplus{}, attributable to a concrete
+end-to-end checkable versus 1/4 for \tlaplus{} --- two failures from a
 \tlaplus{} semantic pitfall (unbounded \texttt{CHOOSE}) that JavaScript's
-native \texttt{null} sidesteps, and to \jssam{}'s self-contained executable
-artifact eliminating the model-checker configuration surface. Finally, a
+native \texttt{null} sidesteps, one from the model-checker configuration
+surface (a harness fault) that \jssam{}'s self-contained artifact
+structurally lacks; the pinned contract of the fourth experiment later
+removes both failure modes, showing this gap is guardrails, not capability. Finally, a
 pre-registered, paired, four-arm study ($N{=}5$ generations per cell) puts
 the conformance question itself under control. Most of an apparent \tlaplus{}
 conformance advantage was \emph{prompt prescriptiveness}, not language:
@@ -587,7 +589,10 @@ verification, direct translator for both languages). Phase 3 is deliberately
 while \tlaplus{}'s is a heavyweight coding-agent path --- different
 mechanisms, not a fair one-to-one. Phase 4 is compared as pass/fail because
 the two languages ship different invariant-template counts for \texttt{spin}
-(seven for \tlaplus{}, three for \jssam{}).
+(seven for \tlaplus{}, three for \jssam{}) --- and the \jssam{} three are
+safety-only, a qualitative weakness examined in \S\ref{sec:limitations}: as
+implemented, \jssam{} Phase 4 could not have failed the never-releasing
+defect of \S\ref{sec:models} in principle.
 
 \subsection{Results}
 
@@ -1070,9 +1075,31 @@ We state these plainly; the study is a case study and should be read as one.
   comparability. Whether a ``pinned-schema'' Phase-3 mode should exist as a
   first-class controlled condition alongside the agent path is a
   methodological question we are putting to the maintainers.
-\item \textbf{Phase 4 differs in template count} (seven \tlaplus{} invariants
-  vs.\ three \jssam{}), so it is compared pass/fail only, and the \jssam{}
-  invariant set is the weaker filter.
+\item \textbf{Phase 4 for \jssam{} is safety-only and could not fail the
+  headline bug in principle.} This is stronger than a template-count
+  difference (seven \tlaplus{} templates vs.\ three \jssam{}). The three
+  \jssam{} invariants are all safety properties over reachable states, and a
+  never-releasing lock satisfies every one of them \emph{because} it is
+  broken: mutual exclusion holds trivially when the lock never changes
+  hands, status consistency holds for a permanently locked holder, and the
+  shipped \texttt{NoDeadlock} (``some thread is not \texttt{trying}'') is
+  satisfied by the stuck holder itself being \texttt{locked}. We verified
+  this empirically: a release-is-a-no-op mutant of the known-good
+  specification passes Phase 4 with the identical 3/3 verdict as the correct
+  one. The properties that would discriminate --- every waiter eventually
+  acquires, every hold is eventually released --- are liveness, and neither
+  the SAM checker nor the lean explorer checks any temporal property (the
+  \jssam{} template library states the exclusion explicitly). Fable's defect
+  is doubly invisible: it manifests only under a pinned observable
+  pre-state, so even a liveness-capable from-init checker would pass its
+  specification --- only trace replay catches it. As mitigation the lean
+  explorer now supports \emph{bounded progress} checks (EF-reachability:
+  from every reachable state satisfying a premise, a goal state must be
+  reachable within the bound --- not liveness: no fairness, bounded
+  horizon). These fail the never-releasing mutant
+  (\texttt{ReleaseProgress}) and would fail the inert Haiku specification
+  (\texttt{AcquireProgress}) that safety-only Phase 4 passed vacuously; all
+  40 saved model-generated lean specifications pass them on both tasks.
 \item \textbf{Model family.} All four models are from one vendor. The
   benchmark's configuration already includes other vendors' models; the
   comparison should be broadened before generalizing.
@@ -1205,7 +1232,10 @@ specifications in \texttt{output/tla\_specs/},
 \texttt{output/tla\_functional\_audit.json}, the permissive control in
 \texttt{tools/tla/}), the paired four-arm driver with raw
 per-window data (\texttt{scripts/tla\_phase3\_study.py},
-\texttt{output/tla\_phase3\_study.json}), the pre-registered design and
+\texttt{output/tla\_phase3\_study.json}), the generation-level analysis of
+record and the repair-generalization audit
+(\texttt{scripts/tla\_phase3\_analysis.py},
+\texttt{scripts/repair\_generalization.py}), the pre-registered design and
 results (\texttt{docs/js\_sam\_tla\_phase3\_*.md}), the lean-contract
 prototype and full-pipeline studies (\texttt{tools/plain-js/},
 \texttt{scripts/plain\_js\_tv.py},

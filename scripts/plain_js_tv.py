@@ -75,13 +75,20 @@ def plain_js_tv(spec_path, windows, timeout: int = 120):
     return statuses if len(statuses) == nw else ["unscoreable"] * nw
 
 
-def plain_js_explore(spec_path, actions, invariants, depth_max: int = 6, timeout: int = 120):
+def plain_js_explore(spec_path, actions, invariants, depth_max: int = 6, timeout: int = 120,
+                     progress=None):
     """Phases 2 & 4 for a lean-contract spec: bounded exploration + invariant check.
 
     Returns the explorer's report dict, or {'ok': False, ...} on failure.
     `actions` is the input domain [{'action', 'data'}, ...]; `invariants` is
     [{'name', 'predicate'}] with predicate a "(state) => boolean" source string.
+    `progress` is [{'name', 'from', 'goal'}] bounded EF-reachability properties
+    (from every reachable state satisfying `from`, some state reachable within
+    the bound satisfies `goal`) — catches defect classes safety invariants
+    cannot (e.g. a never-releasing lock). Not a liveness check: no fairness,
+    bounded horizon.
     """
-    extra = {"actions": actions, "invariants": invariants, "depthMax": depth_max}
+    extra = {"actions": actions, "invariants": invariants, "depthMax": depth_max,
+             "progress": progress or []}
     resp = _run_script("explore.mjs", Path(spec_path), extra, timeout)
     return resp or {"ok": False, "error": "explorer produced no output"}

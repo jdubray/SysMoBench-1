@@ -139,8 +139,28 @@ to a usable spec.*
   `CHOOSE` easily.
 - **Phase 3 not compared** (different mechanisms). JS-SAM's discriminating Phase-3
   scores are in `docs/js_sam_model_comparison.md`.
-- **P4 invariant counts differ by library** (TLA+ spin ships 7 invariants,
-  JS-SAM 3), so P4 is compared as pass/fail, not by count.
+- **P4 for JS-SAM is safety-only and could not fail the headline bug in
+  principle** — a stronger caveat than the template-count difference (TLA+
+  spin ships 7 templates, JS-SAM 3, so P4 is compared pass/fail). All three
+  JS-SAM invariants are safety properties over reachable states, and a
+  never-releasing lock satisfies each one *because* it is broken: mutual
+  exclusion holds trivially when the lock never changes hands; status
+  consistency holds for a permanently locked holder; and the shipped
+  `NoDeadlock` ("some thread is not `'trying'`") is satisfied by the stuck
+  holder itself being `'locked'`. Verified empirically: a release-is-a-no-op
+  mutant of the known-good spec (`tests/fixtures/js_sam/specs/spin-neverrelease.js`)
+  gets the identical 3/3 Phase-4 verdict as the correct spec. The properties
+  that would discriminate (every waiter eventually acquires; every hold is
+  eventually released) are **liveness**, and neither the SAM checker nor the
+  lean explorer checks any temporal property — the JS-SAM template library
+  excludes them explicitly. (The TLA+ template set *declares* two liveness
+  properties routed to `PROPERTY` lines, so the gap is qualitative, not just
+  numeric.) Mitigation: the lean explorer now supports **bounded progress
+  checks** (EF-reachability; not liveness — no fairness, bounded horizon)
+  that fail the never-releasing mutant (`ReleaseProgress`) and would fail the
+  inert Haiku spec (`AcquireProgress`) that safety-only P4 passed vacuously;
+  all 40 saved model-generated lean specs pass them on both tasks. See
+  `tests/test_evaluation/test_lean_explorer.py`.
 - TLA+ tooling note: the setup-downloaded `tla2tools.jar` / `CommunityModules`
   jars were truncated (broken zips) and had to be re-fetched from the pinned
   releases before any TLA+ phase would run.

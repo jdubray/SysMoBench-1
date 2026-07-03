@@ -27,6 +27,15 @@ _SPIN = {
         {"name": "MutualExclusion",
          "predicate": "(s) => !s.lockHeld || (s.lockHolder === 0 || s.lockHolder === 1)"},
     ],
+    # Bounded EF-progress properties (NOT liveness: no fairness, bounded horizon).
+    # Safety invariants provably hold for a never-releasing or inert lock; these
+    # catch exactly those classes.
+    "progress": [
+        {"name": "AcquireProgress",  # a free lock can be acquired
+         "from": "(s) => !s.lockHeld", "goal": "(s) => s.lockHeld"},
+        {"name": "ReleaseProgress",  # a held lock can be freed
+         "from": "(s) => s.lockHeld", "goal": "(s) => !s.lockHeld"},
+    ],
     "reference": PROJECT_ROOT / "tools/plain-js/reference_spin.js",
     "source_file": "ostd/src/sync/spin.rs",
 }
@@ -50,6 +59,15 @@ _LOCKSVC = {
         # FCFS integrity: no client appears twice in the wait queue.
         {"name": "NoDuplicateWaiters",
          "predicate": "(s) => new Set(s.waiters).size === s.waiters.length"},
+    ],
+    # Bounded EF-progress (NOT liveness). Unlike spin, these properties are
+    # state-changing, so they also give held-out replay real discriminating power.
+    "progress": [
+        {"name": "GrantProgress",   # a free lock with waiters can be granted
+         "from": "(s) => s.holder === null && s.waiters.length > 0",
+         "goal": "(s) => s.holder !== null"},
+        {"name": "ReleaseProgress",  # a held lock can be freed
+         "from": "(s) => s.holder !== null", "goal": "(s) => s.holder === null"},
     ],
     "reference": PROJECT_ROOT / "tools/plain-js/reference_locksvc.js",
     "source_file": "systems/locksvc/locksvc.go",
