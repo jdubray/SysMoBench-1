@@ -229,7 +229,7 @@ All four phases evaluate the same Opus 4.8 `spin.js`.
 | Phase | Metric | Result | Detail |
 |---|---|---|---|
 | 1 | compilation_check | **PASS** | 0 syntax errors, 0 semantic errors |
-| 2 | runtime_check | **PASS** | 326,592 states explored (`depthMax 6`), 0 violations, no deadlock |
+| 2 | runtime_check | **PASS** | 326,592 checker steps (`depthMax 6`) reaching **5 distinct states**, 0 violations, no deadlock — the step count is combinatorial (`(d+1)·6^d`), not a state count; see the Phase-2 metric audit in `docs/js_sam_vs_tla_comparison.md` |
 | 3 | transition_validation | **PASS** | **87.5% (7/8 windows)** — AcquireLock 80% (4/5), ReleaseLock 100% (3/3) |
 | 4 | invariant_verification | **PASS** | 3/3 invariants: MutualExclusion, LockStatusConsistency, NoDeadlock |
 

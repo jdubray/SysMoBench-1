@@ -110,6 +110,26 @@ class TestPhase2ModelCheck:
         assert outcome.classification == "runtime_error"
         assert "release by non-holder" in outcome.error_message
 
+    def test_distinct_states_are_semantic_not_combinatorial(self, backend, tmp_path):
+        """Regression for the Phase-2 metric audit: the checker's step count is
+        combinatorial — the same intent-permutation tree for ANY spec honoring the
+        intent-domain contract — so it is model-independent and says nothing about
+        the spec. states_explored must instead report distinct semantic states,
+        which differ between a correct spec and one whose release is a no-op."""
+        good = backend.run_model_checker(SPECS / "spin-good.js", None, tmp_path / "g", timeout=300)
+        broken = backend.run_model_checker(SPECS / "spin-neverrelease.js", None, tmp_path / "b", timeout=300)
+        assert good.success, good.error_message
+        assert broken.success, broken.error_message  # never-releasing is wrong, not crashing
+        g = json.loads(good.raw_output)
+        b = json.loads(broken.raw_output)
+        # Identical work done: same intent domain, same depth => same step count...
+        assert g["stepsExplored"] == b["stepsExplored"]
+        # ...but the semantic state spaces differ, and that is what the outcome reports.
+        assert good.states_explored != broken.states_explored
+        assert 0 < good.states_explored < g["stepsExplored"]
+        # The never-release spec strands the lock: strictly fewer reachable states.
+        assert broken.states_explored < good.states_explored
+
 
 @node_required
 class TestPhase3Transitions:

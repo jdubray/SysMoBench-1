@@ -89,7 +89,10 @@ mandatory auxiliary state); what models transcribe reliably is
 \emph{minimal declarative shape}, in any language. The hypothesis splits:
 familiarity and a self-contained artifact buy checkability; transcription
 fidelity is governed by the shape of the specification contract --- a
-directly actionable design result for \jssam{}. We report these results
+directly actionable design result for \jssam{}, which we validate at
+$N{=}5$ on two tasks --- the kernel spinlock and a distributed lock
+service --- where 40 of 40 model-generated lean-contract specifications
+pass every phase. We report these results
 candidly as a single-task case study, describe the kernel trace-capture and
 controlled-comparison methodology in full, and outline the path to a
 multi-task comparison.
@@ -178,12 +181,16 @@ spinlock~\cite{asterinas}):
   that would otherwise have produced a false headline, a plain-JavaScript
   control arm attributes the residual conformance gap to the SAM contract's
   machinery --- not to the JavaScript language, and not to formality ---
-  yielding a concrete design change for the backend.
+  yielding a concrete design change for the backend, validated by 40/40
+  lean specifications passing every phase across two tasks
+  (\S\ref{sec:locksvc}).
 \end{enumerate}
 
-We emphasize scope honestly: everything here concerns one task and a
-28-window trace corpus, with single-generation results in Experiments 1--3
-and $N{=}5$ replication only in Experiment 4. We present it as a case study whose
+We emphasize scope honestly: the controlled experiments concern one system
+--- the spinlock --- and a 28-window trace corpus (the lean-contract
+validation extends to a second task with its own 60-window corpus);
+Experiments 1--3 are single-generation, with $N{=}5$ replication in
+Experiment 4 and the lean studies. We present it as a case study whose
 value lies in the precision of the failure attribution and the reproducibility
 of the pipeline, not as a settled verdict on the hypothesis
 (\S\ref{sec:limitations}).
@@ -231,7 +238,8 @@ role of guards); \emph{state} is a pure function of the model. A step of the
 system is $\mathit{model.present}(\mathit{action}(\mathit{data}))$. The
 pattern is implemented by the \texttt{sam-pattern}
 library~\cite{sampattern}, which also provides a bounded explorer
-(\texttt{checker}) over the model's reachable states.
+(\texttt{checker}) over the model's reachable states; in the \jssam{}
+backend, this checker is what executes Phases 2 and 4.
 
 Two properties make SAM suitable as a specification substrate. First, the
 semantic alignment with \tlaplus{} means the benchmark's phases map onto it
@@ -382,7 +390,8 @@ Four Claude models spanning the capability range --- Haiku~4.5, Sonnet~4.6,
 Opus~4.8, and Fable~5 (Anthropic's most capable model at the time of
 writing) --- each generated one \jssam{} specification for \texttt{spin} via
 a single prompt (\texttt{direct\_call}), and the same artifact was scored in
-all four phases. Phase 2 and 4 exploration ran at the task's default depth
+all four phases. Phase 2 and 4 exploration ran through the
+\texttt{sam-pattern} library's bounded checker at the task's default depth
 bound of 6; Phase 3 used the 28-window corpus; Phase 4 checked three expert
 invariants (MutualExclusion, LockStatusConsistency, NoDeadlock) translated
 via the direct API path.
@@ -397,12 +406,12 @@ P3 per-action columns give windows passed / windows of that action.}
 \small
 \begin{tabular}{lccrccc}
 \toprule
-Model & P1 & P2 (states) & \multicolumn{1}{c}{P3 overall} & P3 Acquire & P3 Release & P4 \\
+Model & P1 & P2 (distinct states) & \multicolumn{1}{c}{P3 overall} & P3 Acquire & P3 Release & P4 \\
 \midrule
-Claude Opus 4.8   & pass & pass (326{,}592) & \textbf{89.3\%} (25/28) & 14/17 & 11/11 & 3/3 \\
-Claude Fable 5    & pass & pass (326{,}592) & \textbf{50.0\%} (14/28) & 14/17 & \textbf{0/11} & 3/3 \\
-Claude Sonnet 4.6 & pass & pass (326{,}592) & \textbf{50.0\%} (14/28) & 14/17 & 0/11 & 3/3 \\
-Claude Haiku 4.5  & pass & pass (326{,}592) & \textbf{21.4\%} (6/28)  & 6/17  & 0/11 & 3/3 \\
+Claude Opus 4.8   & pass & pass (7) & \textbf{89.3\%} (25/28) & 14/17 & 11/11 & 3/3 \\
+Claude Fable 5    & pass & pass (7) & \textbf{50.0\%} (14/28) & 14/17 & \textbf{0/11} & 3/3 \\
+Claude Sonnet 4.6 & pass & pass (7) & \textbf{50.0\%} (14/28) & 14/17 & 0/11 & 3/3 \\
+Claude Haiku 4.5  & pass & pass (\textbf{1} --- vacuous) & \textbf{21.4\%} (6/28)  & 6/17  & 0/11 & 3/3 \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -410,14 +419,27 @@ Claude Haiku 4.5  & pass & pass (326{,}592) & \textbf{21.4\%} (6/28)  & 6/17  & 
 Two results stand out.
 
 \paragraph{Only the reality check discriminates.}
-Every model passes Phase 1, Phase 2 (all exploring the identical 326{,}592
-states, confirming structurally equivalent state spaces), and Phase 4. On
-this task those three phases have \emph{zero} discriminating power. Phase 3
-spreads the models across a $4\times$ range, and --- restricted to comparisons
-it can make --- orders Opus above the mid tier above Haiku. This
-independently reproduces, in a non-formal language, the central SysMoBench
-finding for \tlaplus{}: internal consistency is cheap; conformance with the
-real system is where specifications fail~\cite{sigops2026}.
+Every model passes Phase 1, Phase 2, and Phase 4. On this task those three
+phases have \emph{zero} discriminating power. An earlier draft reported the
+identical 326{,}592 ``states explored'' per model as confirming structurally
+equivalent state spaces; an audit prompted by review showed that number is the
+checker's \emph{step count} --- safety-callback invocations over the
+intent-permutation tree, $(d{+}1)\cdot 6^{d} = 7\cdot 6^{6}$ --- a pure
+function of the contract-pinned intent domain and depth bound, identical for
+any conforming spec and therefore model-independent. Counting \emph{distinct
+semantic states} (unique model snapshots) instead separates the specs: 7 for
+Opus, Fable, and Sonnet, but \textbf{1 for Haiku}, whose intent actions drop
+their arguments so every proposal is rejected --- its exploration never leaves
+the initial state. Haiku's Phase-2 pass is thus \emph{vacuous} (no crash,
+deterministic, and serializable hold trivially for a spec that cannot move),
+and its Phase-4 invariants are satisfied over that single state. Phase 2
+verifies checkability, not semantic adequacy; the distinct-state count, now
+reported by the checker, is the semantic signal. Phase 3 spreads the models
+across a $4\times$ range, and --- restricted to comparisons it can make ---
+orders Opus above the mid tier above Haiku. This independently reproduces, in
+a non-formal language, the central SysMoBench finding for \tlaplus{}: internal
+consistency is cheap; conformance with the real system is where specifications
+fail~\cite{sigops2026}.
 
 \paragraph{General capability does not predict modeling accuracy.}
 The most striking row is Fable~5, the most capable model tested, scoring
@@ -434,10 +456,13 @@ ReleaseLock  expected {lockHeld: false, lockHolder: null}
 The release logic \emph{reads} correctly in isolation --- it guards on the
 holder, then clears the state --- but on replay the release never takes
 effect: a categorical, whole-action modeling defect. Crucially, this
-specification passed syntax, explored 326{,}592 states without violation, and
-satisfied all three invariants, including mutual exclusion. (A lock that is
-never released trivially preserves mutual exclusion.) Only replay against
-the real kernel's transitions exposed it.
+specification passed syntax, completed the full bounded exploration (7
+distinct states) without violation, and satisfied all three invariants,
+including mutual exclusion. (Its release \emph{does} fire when reached from
+the initial state, where its auxiliary \texttt{threadStatus} guard holds; the
+defect is that replay pins only the observable pre-state, leaving the guard
+unsatisfiable --- so exploration from init cannot expose it.) Only replay
+against the real kernel's transitions caught it.
 
 The recurring failure among the passing acquisitions is also precise: all
 three 14/17 models fail exactly the three \texttt{try\_lock}-from-free
@@ -554,7 +579,7 @@ passing artifact per phase.}
 Model & P1 & P2 & P4 & P2 failure cause \\
 \midrule
 Claude Opus 4.8   & pass & \textbf{fail} & fail & unbounded \texttt{CHOOSE} (TLC rejects) \\
-Claude Fable 5    & pass & pass (574 states) & pass (7 inv.) & --- \\
+Claude Fable 5    & pass & pass (159 distinct states) & pass (7 inv.) & --- \\
 Claude Sonnet 4.6 & pass & \textbf{fail} & fail & unbounded \texttt{CHOOSE} (TLC rejects) \\
 Claude Haiku 4.5  & pass & \textbf{fail} & fail & config generation fell back; no usable \texttt{.cfg} \\
 \bottomrule
@@ -633,18 +658,31 @@ schema), action operators \texttt{AcquireLock(thread, callType)} /
 the identical question --- \emph{express this system over this observable
 state} --- and trace states map onto spec states with no interpretation.
 
-\paragraph{A direct TLC replay path (no agent).}
+\paragraph{A direct TLC replay path (no agent), functional on both sides.}
 With the contract fixed, \tlaplus{} transition validation becomes mechanical,
 mirroring \jssam{}'s \texttt{setState} $\to$ action $\to$ diff: for each
-window, a synthesized module pins the pre-state in its initial predicate,
-takes exactly one step of the window's action (then stutters), and asserts
-via an invariant that the post-state is unreachable; a TLC-reported violation
-means the window \emph{passes}. The replay was validated in both directions
-before use: a contract-following specification passes 28/28 (positive
-control), and the same specification with \texttt{ReleaseLock} mutated to a
-no-op fails exactly the 11 release windows, 17/17 acquires still passing
-(negative control). The replay discriminates; it does not trivially pass
-everything.
+window, a synthesized module pins the pre-state in its initial predicate and
+takes exactly one step of the window's action. Mere reachability of the
+traced post-state would be too weak a criterion: a \tlaplus{} action is a
+\emph{relation}, and an over-permissive action can reach the correct
+post-state while also admitting wrong ones --- passing an existential check
+that the functional JS replay (one \texttt{next} state, compared exactly)
+would fail. The replay therefore enforces the same functional relation on
+both languages: it enumerates the action's one-step image from the pinned
+pre-state and requires that the image be exactly the traced post-state
+(branching factor 1; over-permissiveness fails the window). The check was
+validated in three directions: a contract-following specification passes
+28/28 (positive control); the same specification with \texttt{ReleaseLock}
+mutated to a no-op fails exactly the 11 release windows (negative control);
+and a deliberately permissive specification --- holder set to \emph{any}
+thread on acquire --- passes 28/28 existentially but only 11/28
+functionally, with branching factor 2 (permissive control), demonstrating
+that the functional check is strictly stronger and necessary. An audit of
+all 20 generated \tlaplus{} specifications found every one deterministic:
+existential and functional scores coincide on every window, and the maximum
+branching factor is 1. The \tlaplus{} results below are therefore earned
+under a relation as strict as the JS one, not inflated by existential
+slack.
 
 \paragraph{Four arms, because the prompt and the contract are both confounds.}
 An initial two-arm run (deployed \jssam{} prompt vs.\ constrained \tlaplus{})
@@ -781,14 +819,37 @@ auxiliary state from the replay contract. SAM's ceremony is not gratuitous
 --- the instance, intents, and value domains are exactly what feed the
 Phase-2/4 bounded explorer --- but it should be paid where it buys
 something: explorable structure for model checking, not conformance replay.
-A prototype confirms the decoupling is practical: a reference lean
-specification plus a $\sim$40-line generic breadth-first explorer over
-\texttt{\{init, next\}} runs the entire pipeline in the same locked-down
-sandbox --- Phase 2 passes, all three Phase-4 invariants hold, and Phase 3
-scores 28/28 --- so the SAM machinery is not \emph{required} by any phase.
-(The caveat: \texttt{spin}'s observable state is tiny --- three reachable
-states --- so the lean explorer's adequacy must be re-validated on richer
-tasks before generalizing.)
+A prototype confirms the decoupling is practical: a $\sim$40-line generic
+breadth-first explorer over \texttt{\{init, next\}} runs the entire pipeline
+in the same locked-down sandbox, so the SAM machinery is not \emph{required}
+by any phase. Two points keep this precise. First, the SAM checker itself
+was never the execution problem: it ran Phases 2 and 4 for every \jssam{} arm
+in this paper (the full depth-6 intent exploration each time) without failing
+on any specification it was given; the tax is on the \emph{authoring} side ---
+the instance, intents, acceptors, and auxiliary state the model must
+hand-write to make a specification checker-consumable. (``Ran without
+failing'' is itself a bounded claim: the metric audit in \S\ref{sec:models}
+shows the checker also ran to completion on a specification whose exploration
+never leaves its initial state, so a clean Phase-2 run certifies
+checkability, not adequacy.) Second, nothing is lost at this scale by
+the replacement: the SAM checker and the generic explorer are both bounded
+safety explorers (reachable states, invariants, deadlock), equivalent in
+checking power on these state spaces. The hybrid path keeps the library
+checker unchanged --- the model writes only the pure \texttt{next}, the
+harness generates the scaffolding the checker consumes --- relocating the
+checker from the specification contract to the tooling, which is where TLC
+has always lived on the \tlaplus{} side: no one asks the model to write
+TLC. A follow-up study closes the loop with model-generated
+specifications: each of the four models generated five lean specifications
+($N{=}5$, 20 in total, each saved and evaluated as a single artifact across
+all phases), and \textbf{20 of 20 pass every phase} --- loadable, Phase-2
+clean, Phase-3 28/28, all three Phase-4 invariants holding. Two caveats
+travel with this result: \texttt{spin}'s observable state is tiny (three
+reachable states), so the lean explorer's adequacy must be re-validated on
+richer tasks; and the 20 generations collapse to roughly nine unique
+solutions --- the models converge on the same correct \texttt{next} ---
+which is expected for so small a system but limits the effective sample.
+Both caveats are resolved by a second task (\S\ref{sec:locksvc}).
 
 \paragraph{Checkability, revisited.}
 Zero unscoreable generations in the constrained \tlaplus{} arm confirms
@@ -805,6 +866,36 @@ mean now slightly above Sonnet's). Experiment 1's qualitative conclusions
 survive replication; its exact figures move by up to $\sim$8 points, which is
 the error bar readers should apply to any single-generation number in this
 paper.
+
+\subsection{Generalizing the lean result: a second task}
+\label{sec:locksvc}
+
+The lean-contract demonstration carried two caveats: a three-state
+observable space, and 20 generations collapsing to $\sim$9 unique
+solutions. To resolve both, we built a second full lean task around
+\texttt{locksvc}, SysMoBench's PGo-based distributed lock service ---
+chosen over the ring-buffer candidate because it runs as an ordinary Go
+test with no kernel build, demonstrating in passing that the trace-capture
+methodology of \S\ref{sec:traces} is not kernel-specific. The harness runs
+PGo's trace-recorder test five times and folds the raw MPCal events into
+observable windows over $\{\mathit{holder}, \mathit{waiters}\}$ --- a lock
+holder plus a FIFO wait queue --- yielding a 60-window corpus (15 per
+action), self-consistent across runs. The fold also repairs a real trace
+artifact: PGo's empty vector clocks allow a \texttt{CriticalSection} event
+to be logged before its own \texttt{Grant}; the harness reorders each grant
+before its critical section, which is causally sound (the critical section
+cannot be entered without the grant). The replay and drivers were
+generalized to be task-agnostic: per-task action domains and invariants,
+and the projection rule in place of \texttt{spin}-specific keys.
+
+The result replicates in full: \textbf{20 of 20 model-generated lean
+specifications pass every phase} (5/5 per model), now over a 31-state
+observable space with a genuine queue, and with 11/20 unique solutions
+(36--48 lines, clustering by model) --- materially different correct queue
+implementations, all conforming. Both caveats are thereby resolved: the
+clean sweep is not an artifact of a trivial state space, and the models do
+not converge on a single memorized solution. Across the two tasks, 40/40
+model-generated lean specifications pass every phase.
 
 \section{Discussion}
 \label{sec:discussion}
@@ -860,11 +951,14 @@ of what mattered here.
 We state these plainly; the study is a case study and should be read as one.
 
 \begin{itemize}
-\item \textbf{One task.} Everything here concerns a single system --- a
-  spinlock, the \emph{easiest} class of SysMoBench task. Distributed
-  protocols with richer state (Raft variants, ring buffers, lock services)
-  may reorder every result. The spinlock's simplicity is also why Phases
-  1/2/4 saturate; on harder tasks they discriminate too~\cite{sigops2026}.
+\item \textbf{The controlled comparisons concern one system.} Experiments
+  1--4 all concern the spinlock, the \emph{easiest} class of SysMoBench
+  task; the lean-contract validation now spans two tasks
+  (\S\ref{sec:locksvc}), but the four-arm controlled comparison itself has
+  not been repeated on the second. Distributed protocols with richer state
+  (Raft variants) may reorder results. The spinlock's simplicity is also
+  why Phases 1/2/4 saturate; on harder tasks they discriminate
+  too~\cite{sigops2026}.
 \item \textbf{Experiments 1--3 are single-generation.} Each cell in
   Tables~\ref{tab:models}--\ref{tab:tladetail} is one sample. Experiment 4's
   $N{=}5$ deployed-JS arm retroactively bounds the damage --- ordering
@@ -895,11 +989,17 @@ We state these plainly; the study is a case study and should be read as one.
   ``executable machinery admits bugs a two-variable relation cannot'' as an
   open alternative; the fourth arm was designed to test exactly that, after
   the three-arm results were known (its data were then collected by the same
-  blind mechanical replay). Its conclusion is also bounded: a bare
-  \texttt{next()} function carries no SAM instance, intents, or value
-  domains, so it feeds Phase 3 only --- the lean shape's cost at Phases 2
-  and 4 is unmeasured, and the ``contract tax'' finding applies to
-  conformance, not to the whole benchmark.
+  blind mechanical replay). Its conclusion has since been extended rather
+  than bounded: a generic \texttt{\{init, next\}} explorer replaces the SAM
+  scaffolding for Phases 2 and 4 (at equivalent bounded-safety checking
+  power on these state spaces), and 20/20 model-generated lean
+  specifications pass every phase on \texttt{spin} --- but that
+  demonstration inherits \texttt{spin}'s three-state observable space and a
+  converged solution set ($\sim$9 unique among 20), so the finding needed a
+  second task. The \texttt{locksvc} study (\S\ref{sec:locksvc}) supplies it
+  --- a 31-state space, 11/20 unique solutions, 20/20 passing ---
+  generalizing the contract-tax removal across tasks of this scale, though
+  not yet to large distributed protocols.
 \item \textbf{$b{=}0$ is partly structural.} When the \tlaplus{} arm passes
   every window it fails none, so a JS-only pass is impossible by
   construction; the McNemar then reduces to whether the \jssam{} failure
@@ -964,7 +1064,9 @@ specification language precisely because it sits at the intersection of
 
 We extended SysMoBench with \jssam{}, its first non-formal specification
 backend, built the kernel trace-capture pipeline needed to give it a real
-conformance phase, and ran four experiments on the Asterinas spinlock task.
+conformance phase, and ran four experiments on the Asterinas spinlock task,
+extending the lean-contract validation to a second task (a distributed
+lock service).
 The results make four points with unusual precision for a single case study:
 transition validation against real traces is the only phase that
 discriminated among four frontier models (21.4\%--89.3\%, with all other
@@ -980,19 +1082,43 @@ not to JavaScript and not to formality: plain JavaScript in the shape of the
 \tlaplus{} relation ties \tlaplus{} at 100\% for every model.
 
 The hypothesis that motivated the backend is neither confirmed nor dead; it
-is sharpened twice over. Familiarity buys \emph{checkability}; contract
-minimality buys \emph{transcription fidelity}; and the prompt buys more than
-either. The experiments that follow are concrete: (1)~promoting the lean
-specification shape from prototype to backend: the reference implementation
-(a generic \texttt{\{init, next\}} explorer that already passes all phases
-on \texttt{spin}) supports three integration paths --- a first-class lean
-backend, a hybrid where the model writes only the pure core and the harness
-generates the SAM scaffolding, or the documented status quo --- and should
-next be exercised with model-generated specifications on richer tasks;
-(2)~a derivation-level comparison --- both languages, \emph{no}
-semantics block, on a task rich enough that the semantics cannot be guessed
-from the action names (ring buffer or lock service), which remains the
-decisive open test of the familiarity claim; (3)~a prompt-prescriptiveness
+is answered more usefully than either. Stated plainly, the study ranks what
+governs LLM specification quality: \emph{prompt, then contract shape, then
+language}. Familiarity buys \emph{checkability}; contract minimality buys
+\emph{transcription fidelity}; and the prompt buys more than either. The
+largest effect anywhere in the study came from four lines of prompt
+(Sonnet, 50\%$\to$100\%). The next came from the shape of the artifact: a
+minimal declarative transition function over exactly the observable state
+was written flawlessly by every model, even the weakest, in either language
+--- while every layer of ceremony between the semantics and the artifact
+cost conformance. The language itself, once shape was matched, contributed
+nothing measurable. On the practical question --- can JavaScript replace
+\tlaplus{}? --- the evidence splits cleanly. For LLM-generated conformance
+modeling at this scale: yes, interchangeably on fidelity, and with fewer
+operational failure modes (no \texttt{CHOOSE} trap, no configuration
+artifact). For deep verification: no --- TLC's temporal properties,
+liveness checking, and large-state model checking have no equivalent in
+either bounded safety explorer used here (the SAM library's checker or its
+40-line generic replacement), and remain \tlaplus{}'s distinctive value. The search
+this motivates is therefore not for a better specification \emph{language}
+but for a better specification \emph{contract}:
+\texttt{\{init, next\}} over observable keys, in whatever language the
+model writes well, with richer machinery generated by the harness rather
+than transcribed by the model. Two questions remain genuinely open:
+whether these conclusions survive \emph{derivation} --- models extracting
+the semantics from source code too complex to guess --- and whether they
+survive scale.
+
+The experiments that follow are concrete: (1)~promoting the lean
+specification shape from demonstration to backend: with model-generated
+lean specifications passing all phases 40/40 across both tasks, the
+remaining question is purely integration --- a first-class lean backend, a
+hybrid where the model writes only the pure core and the harness generates
+the SAM scaffolding, or the documented status quo; (2)~a derivation-level
+comparison --- both languages, \emph{no} semantics block, on a task whose
+semantics cannot be guessed from the action names --- now unblocked by the
+\texttt{locksvc} harness and still the decisive open test of the
+familiarity claim; (3)~a prompt-prescriptiveness
 dose--response study, treating the semantics block as the manipulated
 variable rather than a nuisance; (4)~an as-deployed agent-path arm beside
 the controlled replay, for ecological validity; (5)~a \tlaplus{} repair
@@ -1012,13 +1138,21 @@ All artifacts are public: the \jssam{} backend
 harness (\texttt{scripts/harness/spin/}), the captured corpus
 (\texttt{data/sys\_traces/spin/}), the repair driver
 (\texttt{scripts/repair\_phase3.py}), the Experiment-4 apparatus --- the
-constrained and plain-JS prompts, the direct TLC replay
-(\texttt{scripts/tla\_direct\_tv.py}), the paired four-arm driver with raw
+constrained and plain-JS prompts, the direct TLC replay and its
+functional-check audit (\texttt{scripts/tla\_direct\_tv.py}, the 20 audited
+specifications in \texttt{output/tla\_specs/},
+\texttt{output/tla\_functional\_audit.json}, the permissive control in
+\texttt{tools/tla/}), the paired four-arm driver with raw
 per-window data (\texttt{scripts/tla\_phase3\_study.py},
 \texttt{output/tla\_phase3\_study.json}), the pre-registered design and
 results (\texttt{docs/js\_sam\_tla\_phase3\_*.md}), the lean-contract
-prototype (\texttt{tools/plain-js/}, \texttt{scripts/plain\_js\_tv.py},
-\texttt{docs/js\_sam\_lean\_contract.md}), and the methodology note
+prototype and full-pipeline studies (\texttt{tools/plain-js/},
+\texttt{scripts/plain\_js\_tv.py},
+\texttt{scripts/lean\_full\_pipeline\_study.py}, the 40 saved generations in
+\texttt{output/lean\_specs*/}, \texttt{docs/js\_sam\_lean\_contract.md}),
+the \texttt{locksvc} harness and corpus
+(\texttt{scripts/harness/locksvc/}, \texttt{data/sys\_traces/locksvc/}), and
+the methodology note
 (\texttt{paper/methodology.md}) --- and the experiment write-ups
 (\texttt{docs/js\_sam\_*.md}) in the SysMoBench fork at
 \url{https://github.com/jdubray/SysMoBench-1}, staged as stacked pull

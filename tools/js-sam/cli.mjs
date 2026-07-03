@@ -205,14 +205,23 @@ const loadSpec = (specPath, targetActions = []) => {
  * @param {number} depthMax exploration depth bound
  * @param {Array<{name: string, holds: (state: object) => boolean}>} predicates
  *        safety predicates that must hold in every reachable state
- * @returns {{ steps: number, runtimeErrors: object[], violations: object[],
- *             predicateErrors: object[], serializationErrors: string[] }}
+ * @returns {{ steps: number, distinctStates: number, runtimeErrors: object[],
+ *             violations: object[], predicateErrors: object[],
+ *             serializationErrors: string[] }}
+ *
+ * `steps` counts safety-callback invocations over the checker's
+ * intent-permutation tree — it is COMBINATORIAL (a function of the intent
+ * domain and depthMax only), identical for any two specs honoring the same
+ * intent contract, and therefore says nothing about a spec's semantics.
+ * `distinctStates` counts unique serialized model snapshots actually reached —
+ * the semantic state-space measure. Report the latter as the spec's state count.
  */
 const explore = (mod, depthMax, predicates = []) => {
   const runtimeErrors = [];
   const violations = [];
   const predicateErrors = [];
   const serializationErrors = [];
+  const seenStates = new Set();
   let steps = 0;
 
   const safety = (state) => {
@@ -240,6 +249,7 @@ const explore = (mod, depthMax, predicates = []) => {
       }
       return false;
     }
+    seenStates.add(JSON.stringify(snapshot));
 
     for (const predicate of predicates) {
       let holds;
@@ -274,7 +284,14 @@ const explore = (mod, depthMax, predicates = []) => {
     },
   );
 
-  return { steps, runtimeErrors, violations, predicateErrors, serializationErrors };
+  return {
+    steps,
+    distinctStates: seenStates.size,
+    runtimeErrors,
+    violations,
+    predicateErrors,
+    serializationErrors,
+  };
 };
 
 // ---------------------------------------------------------------------------
@@ -333,7 +350,7 @@ const cmdCheck = async (request) => {
   }
   const elapsedMs = Date.now() - started;
 
-  const digest = (run) => JSON.stringify([run.steps, run.runtimeErrors, run.serializationErrors]);
+  const digest = (run) => JSON.stringify([run.steps, run.distinctStates, run.runtimeErrors, run.serializationErrors]);
   const isDeterministic = digest(first) === digest(second);
 
   let classification = null;
@@ -355,6 +372,7 @@ const cmdCheck = async (request) => {
     classification,
     depthMax,
     stepsExplored: first.steps,
+    distinctStates: first.distinctStates,
     runtimeErrors: first.runtimeErrors,
     errors,
     elapsedMs,
@@ -532,6 +550,7 @@ const cmdInvariants = async (request) => {
       error: problems.length > 0 ? problems.join('; ') : null,
       counterexample: run.violations[0]?.behavior ?? null,
       stepsExplored: run.steps,
+      distinctStates: run.distinctStates,
       elapsedMs: Date.now() - started,
     });
   }
