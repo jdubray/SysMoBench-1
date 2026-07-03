@@ -44,64 +44,35 @@ A \jssam{} Case Study on SysMoBench}}
 \maketitle
 
 \begin{abstract}
-SysMoBench evaluates whether large language models (LLMs) can formally model
-real-world concurrent and distributed systems, grading generated \tlaplus{}
-specifications through four automated phases: syntax, bounded model checking,
-conformance against execution traces captured from the real system, and
-invariant verification. We extend SysMoBench with its first
-\emph{non-formal-language} backend, \jssam{}: specifications written in
-JavaScript following the SAM pattern, whose semantics --- actions propose,
-a model accepts, state is a pure function of the model --- are deliberately
-aligned with \tlaplus{}. The backend tests a specific hypothesis: LLMs may
-model systems more accurately in a language ubiquitous in their training data
-than in formal languages they rarely see.
-
-Using the Asterinas OS spinlock task, we instrument the real kernel, run it
-under QEMU, and capture a 28-window transition corpus; we then evaluate four
-Claude models (Haiku~4.5, Sonnet~4.6, Opus~4.8, Fable~5) end to end. Four
-findings emerge. First, trace conformance is the only phase with discriminating
-power: all four models pass syntax, model checking, and invariant verification
-(one of them, a metric audit later showed, vacuously --- its exploration
-never left the initial state), while conformance spreads them from 21.4\% to 89.3\% --- including a frontier
-model that silently no-ops an entire action (every \texttt{ReleaseLock}) yet
-passes every internal-consistency phase. Second, a single round of
-repair-from-trace-feedback splits the models into repairers and a
-non-repairer (a replication showed the apparent middle ``partial'' tier does
-not survive resampling), and shows that one-shot accuracy and repair ability
-are different axes: the model with the categorical release defect repairs to
-100\% --- with a generalization audit confirming the repairs are root-cause
-fixes, not memorized windows --- while the weakest model cannot use the
-feedback at all.
-Third, on the same task and models, 4/4 \jssam{} specifications are
-end-to-end checkable versus 1/4 for \tlaplus{} --- two failures from a
-\tlaplus{} semantic pitfall (unbounded \texttt{CHOOSE}) that JavaScript's
-native \texttt{null} sidesteps, one from the model-checker configuration
-surface (a harness fault) that \jssam{}'s self-contained artifact
-structurally lacks; the pinned contract of the fourth experiment later
-removes both failure modes, showing this gap is guardrails, not capability. Finally, a
-pre-registered, paired, four-arm study ($N{=}5$ generations per cell) puts
-the conformance question itself under control. Most of an apparent \tlaplus{}
-conformance advantage was \emph{prompt prescriptiveness}, not language:
-adding the identical semantics block to the JavaScript prompt closed most of
-the gap. A one-directional residual survives that control --- \tlaplus{}
-reaches 100\% conformance for every model and every generation, constrained
-\jssam{} does so for one model of four --- but a plain-JavaScript control arm
-locates its cause: a bare \texttt{next(state, action, data)} transition
-function, structurally isomorphic to the \tlaplus{} relation, ties \tlaplus{}
-at 100\% for every model and every generation. The residual is therefore
-attributable neither to JavaScript nor to formality but to the SAM
-specification contract's defect surface (proposal/acceptor wiring plus
-mandatory auxiliary state); what models transcribe reliably is
-\emph{minimal declarative shape}, in any language. The hypothesis splits:
-familiarity and a self-contained artifact buy checkability; transcription
-fidelity is governed by the shape of the specification contract --- a
-directly actionable design result for \jssam{}, which we validate at
-$N{=}5$ on two tasks --- the kernel spinlock and a distributed lock
-service --- where 40 of 40 model-generated lean-contract specifications
-pass every phase. We report these results
-candidly as a single-task case study, describe the kernel trace-capture and
-controlled-comparison methodology in full, and outline the path to a
-multi-task comparison.
+SysMoBench grades LLM-generated specifications of real concurrent and
+distributed systems through four automated phases: syntax, bounded model
+checking, conformance against traces captured from the running system, and
+invariant verification. We extend it with \jssam{}, its first
+non-formal-language backend --- JavaScript specifications in the SAM
+pattern, whose semantics deliberately mirror \tlaplus{} --- to test whether
+LLMs model systems more faithfully in a language abundant in their training
+data. We instrument the Asterinas kernel spinlock for ground-truth traces
+and evaluate four Claude models end to end. Trace conformance is the only
+phase that discriminates (21.4\%--89.3\%; the other phases are unanimous,
+one pass provably vacuous), and one round of trace feedback repairs some
+specifications completely --- audited as root-cause fixes, not
+memorization. JavaScript reaches an evaluable artifact 4/4 times versus 1/4
+for \tlaplus{}, a gap of guardrails rather than capability. A
+pre-registered, paired, controlled comparison --- completed to a full
+$2{\times}2$ factorial in (contract, prompt) after review --- then resolves
+the language question in an unexpected place: the specification
+\emph{contract} is the dominant, uniform factor. A bare
+\texttt{next(state, action, data)} function, structurally isomorphic to the
+\tlaplus{} relation, ties \tlaplus{} at 100\% for every model \emph{with or
+without spec-level semantics in the prompt}, while prompt prescriptiveness
+--- large enough to masquerade as a language effect --- moves only two of
+four models within the SAM contract. The result is validated by 40/40
+model-generated lean-contract specifications passing every phase across two
+tasks. On this
+evidence, what governs LLM specification quality is the shape of the
+specification contract first, the prompt second (a real but model-dependent
+factor), and the language not measurably at all. We report a single-system
+case study with its corrections documented in-line.
 \end{abstract}
 
 \section{Introduction}
@@ -182,15 +153,18 @@ spinlock~\cite{asterinas}):
   end-to-end evaluability versus 1/4 for \tlaplus{}, with each \tlaplus{}
   failure attributed to a specific structural cause.
 \item \textbf{A controlled cross-language conformance study}
-  (\S\ref{sec:crosslang}): a pre-registered, paired, four-arm design
-  ($N{=}5$ generations per cell) that pins both languages to the same
-  observable-state contract and replays the same trace corpus mechanically in
-  both. After catching and controlling a prompt-prescriptiveness confound
-  that would otherwise have produced a false headline, a plain-JavaScript
-  control arm attributes the residual conformance gap to the SAM contract's
-  machinery --- not to the JavaScript language, and not to formality ---
-  yielding a concrete design change for the backend, validated by 40/40
-  lean specifications passing every phase across two tasks
+  (\S\ref{sec:crosslang}): a pre-registered, paired design, completed after
+  review to a full $2{\times}2$ factorial in (contract, prompt) plus a
+  \tlaplus{} reference ($N{=}5$ generations per cell), pinning both languages
+  to the same observable-state contract and replaying the same trace corpus
+  mechanically in both. The completed factorial attributes the conformance
+  gap to the SAM contract's machinery --- not to the JavaScript language, not
+  to formality, and not (as an incomplete design had suggested) primarily to
+  prompt prescriptiveness: the lean contract reaches 100\% for every model
+  \emph{without} the semantics block, while the semantics block within SAM
+  moves only two of four models. This yields a concrete design change for
+  the backend, validated by 40/40 lean specifications passing every phase
+  across two tasks
   (\S\ref{sec:locksvc}).
 \end{enumerate}
 
@@ -749,6 +723,18 @@ varies language and contract together; plain-JS vs.\ TLA(constrained) varies
 \emph{only} the language; JS(constrained) vs.\ plain-JS varies \emph{only}
 the contract.
 
+\paragraph{Completing the factorial: the missing lean-without-semantics cell.}
+Review observed that these arms form an \emph{incomplete} $2{\times}2$ in
+(contract, prompt): the lean arm always carried the semantics block, so
+``contract minimality buys transcription fidelity'' was established only
+conditional on spec-level semantics in the prompt, and any
+prompt-vs-contract effect ordering rested on the incomplete design. We added
+the missing cell --- \textbf{plain-JS(no-semantics)}: the identical lean
+contract (module shape, two observable keys, action names, data schema, and
+a description of the replay \emph{mechanism}) with the entire single-step
+semantics block removed, so the model must derive the transition semantics
+from the Rust source alone.
+
 \paragraph{Replication, pairing, and checkability.}
 $N{=}5$ generations per model per arm (80 in total), all scored per-window on
 the same 28-window kernel corpus. The pre-registered analysis was a pooled
@@ -771,17 +757,19 @@ plain-JS generation.
 \centering
 \caption{Cross-language Phase-3 conformance (mean pass rate over $N{=}5$
 generations per cell; 28-window corpus). Conditional and unconditional rates
-coincide --- no unscoreable windows.}
+coincide --- no unscoreable windows. The columns form the completed
+$2{\times}2$ in (contract, prompt) plus the \tlaplus{} reference:
+SAM/lean contract $\times$ without/with the semantics block.}
 \label{tab:crosslang}
 \small
-\begin{tabular}{lcccc}
+\begin{tabular}{lccccc}
 \toprule
-Model & JS (deployed) & JS (constrained) & plain-JS & \tlaplus{} (constrained) \\
+Model & SAM, no sem.\ & SAM, sem.\ & lean, no sem.\ & lean, sem.\ & \tlaplus{} \\
 \midrule
-Claude Opus 4.8   & 81.4\% & 89.3\%          & \textbf{100\%} & \textbf{100\%} \\
-Claude Fable 5    & 57.9\% & 95.7\%          & \textbf{100\%} & \textbf{100\%} \\
-Claude Sonnet 4.6 & 50.0\% & \textbf{100\%}  & \textbf{100\%} & \textbf{100\%} \\
-Claude Haiku 4.5  & 28.6\% & 40.7\%          & \textbf{100\%} & \textbf{100\%} \\
+Claude Opus 4.8   & 81.4\% & 89.3\%          & \textbf{100\%} & \textbf{100\%} & \textbf{100\%} \\
+Claude Fable 5    & 57.9\% & 95.7\%          & \textbf{100\%} & \textbf{100\%} & \textbf{100\%} \\
+Claude Sonnet 4.6 & 50.0\% & \textbf{100\%}  & \textbf{100\%} & \textbf{100\%} & \textbf{100\%} \\
+Claude Haiku 4.5  & 28.6\% & 40.7\%          & \textbf{100\%} & \textbf{100\%} & \textbf{100\%} \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -812,15 +800,44 @@ Haiku 4.5  & 1/2/1/1 & $\Delta{=}.714$, $p{=}.0079^{*}$ & $\Delta{=}.593$, $p{=}
 
 \subsection{Findings}
 
-\paragraph{Most of the apparent \tlaplus{} advantage was prompt
-prescriptiveness, not language.}
+\paragraph{Prompt prescriptiveness is a large, real confound --- but the
+completed factorial demotes it from the headline.}
 Adding the same semantics block to the JavaScript prompt --- changing nothing
 else --- moved Fable from 57.9\% to 95.7\% and Sonnet from 50.0\% to a
 perfect 100\%. Had we reported the two-arm run, the headline would have been
-a decisive language reversal; most of that effect was the prompt. We regard
-catching this as a result in its own right: \emph{prompt prescriptiveness is
-a first-class experimental variable in specification-generation benchmarks},
-large enough to masquerade as a language effect.
+a decisive language reversal, and an earlier draft accordingly read ``most of
+that effect was the prompt.'' The completed $2{\times}2$ shows that reading
+was an artifact of examining only the SAM column: at the generation level the
+within-SAM prompt effect is significant for exactly those two models (Fable
+$\Delta{=}.379$, $p{=}.024$; Sonnet $\Delta{=}.500$, $p{=}.0079$) and not for
+Opus ($\Delta{=}.079$, $p{=}1$) or Haiku ($\Delta{=}.121$, $p{=}1$), whereas
+the \emph{contract} effect without any semantics block (SAM vs.\ lean, both
+promptless) is significant for \emph{all four} models
+($\Delta{=}.186/.421/.500/.714$, each $p{=}.0079$). Prompt prescriptiveness
+remains a result in its own right --- \emph{it is a first-class experimental
+variable, large enough to masquerade as a language effect} --- but on this
+task it is the model-dependent factor, and the contract is the uniform one.
+
+\paragraph{The missing cell: the lean contract needs no semantics block.}
+The lean-without-semantics arm reaches \textbf{100\% for every generation of
+every model} --- including Haiku, at 28.6\% under the SAM contract with the
+same absent semantics. All 20 generations are textually distinct (5/5 unique
+per model, saved with the study artifacts) yet behaviorally identical and
+correct: given a bare \texttt{next()} target, every model derives the
+observable single-step semantics from the kernel source alone. This settles
+the conditionality the incomplete design left open: contract minimality buys
+transcription fidelity \emph{unconditionally} on spec-level semantics in the
+prompt. Two honesty notes travel with this. First, with both lean cells and
+\tlaplus{} at 100\%, effect \emph{ordering} at the top is not identifiable
+--- the within-lean prompt effect and any prompt$\times$contract interaction
+have no headroom to appear (a ceiling effect); what is identifiable is that
+contract $\geq$ prompt for every model, strictly greater for Opus and Haiku,
+and that the lean contract suffices without semantics while the semantics
+block within SAM does not (three of four models below 100\%). Second, the
+100\% ceiling itself is a property of this task's tiny observable relation;
+the \texttt{locksvc} replication (\S\ref{sec:locksvc}) shows the lean result
+generalizing to a richer state, but the factorial has not yet been re-run
+there.
 
 \paragraph{A real, one-directional residual survives the prompt control.}
 With identical semantics in both prompts, \tlaplus{} reaches 100\%
@@ -998,10 +1015,28 @@ effect was the specification contract: every layer of machinery between the
 semantics and the artifact --- proposals, acceptors, auxiliary state --- is
 surface on which transcription slips, and the tax falls hardest on the
 weakest models. Neither training-data abundance nor formality is the
-operative variable on this task; \emph{contract minimality} is. And the
-largest single effect in the study is still the prompt
-(Sonnet 50\%$\to$100\%): prompt, then contract, then language is the order
-of what mattered here.
+operative variable on this task; \emph{contract minimality} is. The largest
+single-model effect in the study is a prompt effect (Sonnet
+50\%$\to$100\%), but the completed factorial shows the prompt moves only two
+of four models within the SAM contract while the contract switch moves all
+four to ceiling with no semantics at all: contract, then prompt, then
+language is the order of what mattered here.
+
+\paragraph{A benchmark everyone passes measures nothing --- and that, too,
+is a finding.}
+There is an irony in the lean-contract result that deserves stating
+plainly. This paper's first finding is that Phase 3 was the only phase
+that discriminated among models; its last is a specification shape under
+which every model --- Haiku included --- scores 100\% on both tasks. The
+lean contract does not break the benchmark; it \emph{saturates} these two
+tasks, and the saturation is itself informative: given spec-level
+semantics and a minimal contract, transcription is a solved problem for
+current frontier models on systems of this size. What saturation exposes
+is exactly what should be measured next: derivation (no semantics block),
+scale (systems whose behavior cannot be summarized in a prompt), and the
+temporal properties no bounded safety explorer checks. A benchmark's job
+is to move its frontier when models catch up; the lean contract is that
+motion, not its defeat.
 
 \section{Limitations and threats to validity}
 \label{sec:limitations}
@@ -1012,7 +1047,7 @@ We state these plainly; the study is a case study and should be read as one.
 \item \textbf{The controlled comparisons concern one system.} Experiments
   1--4 all concern the spinlock, the \emph{easiest} class of SysMoBench
   task; the lean-contract validation now spans two tasks
-  (\S\ref{sec:locksvc}), but the four-arm controlled comparison itself has
+  (\S\ref{sec:locksvc}), but the factorial controlled comparison itself has
   not been repeated on the second. Distributed protocols with richer state
   (Raft variants) may reorder results. The spinlock's simplicity is also
   why Phases 1/2/4 saturate; on harder tasks they discriminate
@@ -1162,25 +1197,29 @@ fully and verifiably (a held-out audit found root-cause fixes, not memorized
 windows), the weakest not at all; the same
 models that reach an evaluable specification in JavaScript 4/4 times manage
 it in \tlaplus{} 1/4 times, for two identifiable structural reasons; and
-under a pre-registered, paired, four-arm controlled comparison, the
-faithfulness question resolves in an unexpected place --- most of an
-apparent \tlaplus{} conformance advantage was prompt prescriptiveness, and
-the residual that survives is attributable to the SAM contract's machinery,
-not to JavaScript and not to formality: plain JavaScript in the shape of the
-\tlaplus{} relation ties \tlaplus{} at 100\% for every model.
+under a pre-registered, paired comparison completed to a full $2{\times}2$
+factorial in (contract, prompt), the faithfulness question resolves in an
+unexpected place --- the conformance gap is attributable to the SAM
+contract's machinery, not to JavaScript, not to formality, and not primarily
+to prompt prescriptiveness: plain JavaScript in the shape of the \tlaplus{}
+relation ties \tlaplus{} at 100\% for every model, with or without
+spec-level semantics in the prompt.
 
 The hypothesis that motivated the backend is neither confirmed nor dead; it
-is answered more usefully than either. Stated plainly, the study ranks what
-governs LLM specification quality: \emph{prompt, then contract shape, then
-language}. Familiarity buys \emph{checkability}; contract minimality buys
-\emph{transcription fidelity}; and the prompt buys more than either. The
-largest effect anywhere in the study came from four lines of prompt
-(Sonnet, 50\%$\to$100\%). The next came from the shape of the artifact: a
-minimal declarative transition function over exactly the observable state
-was written flawlessly by every model, even the weakest, in either language
---- while every layer of ceremony between the semantics and the artifact
-cost conformance. The language itself, once shape was matched, contributed
-nothing measurable. On the practical question --- can JavaScript replace
+is answered more usefully than either. Stated plainly, the completed study
+ranks what governs LLM specification quality: \emph{contract shape first,
+prompt second, language nowhere}. Familiarity buys \emph{checkability};
+contract minimality buys \emph{transcription fidelity} --- unconditionally:
+the lean-without-semantics cell reaches 100\% for every model, including the
+weakest at 28.6\% under the SAM contract, so every model \emph{derives} the
+correct observable semantics from the kernel source when the target is a
+bare transition function. The prompt is the model-dependent factor: four
+lines of semantics moved Sonnet 50\%$\to$100\% and Fable 57.9\%$\to$95.7\%
+within the SAM contract, but moved Opus and Haiku insignificantly --- and at
+the lean contract it had nothing left to move (a ceiling at which effect
+ordering among the perfect cells is, we note, not identifiable). Every layer
+of ceremony between the semantics and the artifact cost conformance; the
+language itself, once shape was matched, contributed nothing measurable. On the practical question --- can JavaScript replace
 \tlaplus{}? --- the evidence splits cleanly. For LLM-generated conformance
 modeling at this scale: yes, interchangeably on fidelity, and with fewer
 operational failure modes (no \texttt{CHOOSE} trap, no configuration
@@ -1193,8 +1232,10 @@ but for a better specification \emph{contract}:
 \texttt{\{init, next\}} over observable keys, in whatever language the
 model writes well, with richer machinery generated by the harness rather
 than transcribed by the model. Two questions remain genuinely open:
-whether these conclusions survive \emph{derivation} --- models extracting
-the semantics from source code too complex to guess --- and whether they
+whether these conclusions survive \emph{derivation at depth} --- the
+lean-without-semantics cell already shows every model deriving this lock's
+semantics from its source unaided, but a spinlock's observable relation is
+guessable in a way a consensus protocol's is not --- and whether they
 survive scale.
 
 The experiments that follow are concrete: (1)~promoting the lean
@@ -1230,7 +1271,7 @@ constrained and plain-JS prompts, the direct TLC replay and its
 functional-check audit (\texttt{scripts/tla\_direct\_tv.py}, the 20 audited
 specifications in \texttt{output/tla\_specs/},
 \texttt{output/tla\_functional\_audit.json}, the permissive control in
-\texttt{tools/tla/}), the paired four-arm driver with raw
+\texttt{tools/tla/}), the paired factorial driver with raw
 per-window data (\texttt{scripts/tla\_phase3\_study.py},
 \texttt{output/tla\_phase3\_study.json}), the generation-level analysis of
 record and the repair-generalization audit

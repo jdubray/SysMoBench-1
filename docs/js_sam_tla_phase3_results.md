@@ -3,25 +3,70 @@
 **Design:** `docs/js_sam_tla_phase3_plan.md` · **Driver:** `scripts/tla_phase3_study.py`
 **N=5 generations per model per arm; 28-window kernel corpus; scored per-window.**
 
-Four arms isolate, in turn, the prompt, the language, and the SAM pattern:
+The design is a **2×2 factorial in (contract, prompt)** plus the TLA+ reference
+arm. Contract: the SAM module contract vs the lean `next(state, action, data)`
+contract (no library, two keys — structurally isomorphic to the TLA+ relation).
+Prompt: with vs without the pinned single-step semantics block.
 
-- **JS(deployed)** — the shipped JS-SAM prompt (does not state the single-step semantics).
-- **JS(constrained)** — deployed prompt **+ the same single-step semantics block** the TLA+ arm uses.
-- **plain-JS** — a bare `next(state, action, data) → {lockHeld, lockHolder}` pure
-  function: **no SAM library, two keys only** — structurally isomorphic to the TLA+ relation.
-- **TLA+(constrained)** — the constrained TLA+ prompt.
+- **SAM + none** (`js`) — the shipped JS-SAM prompt (no semantics block).
+- **SAM + semantics** (`jsc`) — deployed prompt + the same semantics block the TLA+ arm uses.
+- **lean + none** (`pjd`) — the lean contract, NO semantics block: the model must
+  derive the observable transition semantics from the Rust source alone.
+  *(This cell was initially missing — added after review; prompt:
+  `tla_eval/tasks/spin/prompts/plain-js/direct_call_nosemantics.txt`.)*
+- **lean + semantics** (`pjs`) — the lean contract + the semantics block.
+- **TLA+(constrained)** — the constrained TLA+ prompt (reference arm).
 
-All arms use identical source, the identical semantics block (except the deployed
-JS arm), and the identical 28-window corpus.
+All arms use identical source and the identical 28-window corpus.
 
 ## Pass rates (mean over 5 generations; 0 unscoreable everywhere → conditional = unconditional)
 
-| Model | JS (deployed) | JS (constrained) | plain-JS | TLA+ (constrained) |
+| Model | SAM + none | SAM + semantics | lean + none | lean + semantics | TLA+ |
+|---|---|---|---|---|---|
+| Opus 4.8   | 81.4% | 89.3% | **100%** | **100%** | **100%** |
+| Fable 5    | 57.9% | 95.7% | **100%** | **100%** | **100%** |
+| Sonnet 4.6 | 50.0% | 100%  | **100%** | **100%** | **100%** |
+| Haiku 4.5  | 28.6% | 40.7% | **100%** | **100%** | **100%** |
+
+## The completed 2×2: contract dominates, and unconditionally
+
+The original four-arm design had an empty factorial cell — the lean arm always
+carried the semantics block, so "contract minimality buys transcription
+fidelity" was established only *conditional on* spec-level semantics in the
+prompt. The added `lean + none` cell settles it:
+
+**Every model reaches 100% under the lean contract with no semantics block —
+including Haiku (28.6% under SAM + none).** All 20 generations, 28/28 windows,
+5/5 unique spec texts per model (saved in `output/study_specs/`), all
+behaviorally identical and correct. The models derive the observable
+single-step semantics from the Rust source alone when the target shape is a
+bare transition function. The conditionality the review suspected is refuted.
+
+Factorial contrasts at the generation level (exact permutation, floor p=0.0079):
+
+| Model | contract effect, no semantics (js→pjd) | contract effect, semantics (jsc→pjs) | prompt effect, SAM (js→jsc) | prompt effect, lean (pjd→pjs) |
 |---|---|---|---|---|
-| Opus 4.8   | 81.4% | 89.3% | **100%** | **100%** |
-| Fable 5    | 57.9% | 95.7% | **100%** | **100%** |
-| Sonnet 4.6 | 50.0% | 100%  | **100%** | **100%** |
-| Haiku 4.5  | 28.6% | 40.7% | **100%** | **100%** |
+| Opus   | Δ=.186, p=.0079* | Δ=.107, p=.0079* | Δ=.079, p=1.0 | Δ=0 (ceiling) |
+| Fable  | Δ=.421, p=.0079* | Δ=.043, p=.44   | Δ=.379, p=.024* | Δ=0 (ceiling) |
+| Sonnet | Δ=.500, p=.0079* | Δ=0, p=1        | Δ=.500, p=.0079* | Δ=0 (ceiling) |
+| Haiku  | Δ=.714, p=.0079* | Δ=.593, p=.0079* | Δ=.121, p=1.0 | Δ=0 (ceiling) |
+
+This **revises the earlier "prompt explains most of the reversal" reading**,
+which was an artifact of examining only the SAM column:
+
+- **The contract effect is the uniform one**: significant for all four models
+  without semantics, and switching to the lean contract reaches ceiling
+  regardless of prompt.
+- **The prompt effect is real but model-dependent**, significant within SAM for
+  only Fable and Sonnet (the two whose SAM specs happened to be one semantics
+  clarification away from correct), not for Opus or Haiku.
+- **Ordering at the ceiling is not identifiable** — with both lean cells at
+  100%, the within-lean prompt effect and any prompt×contract interaction have
+  no headroom to appear, and `lean+none = lean+sem = TLA+` cannot be ranked
+  among themselves. What *is* identifiable: contract ≥ prompt for every model
+  (strictly greater for Opus and Haiku), and the lean contract is sufficient
+  without semantics while the semantics block within SAM is not (3 of 4 models
+  below 100%).
 
 ## Statistics at the correct unit (retraction + reanalysis)
 
@@ -100,12 +145,16 @@ richer state), and it lags. This reframes the earlier partial "formal directness
 forces precision" reading: it was never TLA+'s formality; it was the minimal
 declarative shape that TLA+ happened to have and SAM-JS didn't.
 
-**4. Prompt prescriptiveness was a large confound (controlled).** Before the
-plain-JS arm settled it, the raw deployed-JS-vs-TLA reversal was mostly the prompt:
-adding the semantics block to the JS prompt closed most of the gap (Fable 58→96%,
-Sonnet 50→100%). The residual that survived *that* control (Opus, Fable, Haiku
-still < 100% under SAM) is what the plain-JS arm now fully explains as SAM
-machinery.
+**4. Prompt prescriptiveness was a large confound (controlled) — but the
+completed factorial demotes it.** Before the plain-JS arm settled it, the raw
+deployed-JS-vs-TLA reversal looked mostly like the prompt: adding the semantics
+block to the JS prompt closed most of the gap for Fable (58→96%) and Sonnet
+(50→100%). The completed 2×2 (see above) shows that reading was an artifact of
+the SAM column: the prompt effect is significant for only those two models,
+while the contract effect is significant for all four — and the lean contract
+reaches 100% *without* any semantics block. Prompt prescriptiveness remains a
+first-class experimental variable (it can masquerade as a language effect), but
+on this task the contract is the dominant and uniform factor.
 
 **5. Checkability was solved by the constraint.** 0 unscoreable windows across all
 60 constrained/plain/TLA generations. The earlier TLA+ "1/4 model-checkable"

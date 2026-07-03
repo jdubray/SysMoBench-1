@@ -113,24 +113,30 @@ def main():
     js_prompt = _fill((PROJECT_ROOT / "tla_eval/tasks/spin/prompts/js-sam/direct_call.txt").read_text(encoding="utf-8"), src)
     jsc_prompt = _fill((PROJECT_ROOT / "tla_eval/tasks/spin/prompts/js-sam/direct_call_constrained.txt").read_text(encoding="utf-8"), src)
     pjs_prompt = _fill((PROJECT_ROOT / "tla_eval/tasks/spin/prompts/plain-js/direct_call.txt").read_text(encoding="utf-8"), src)
+    pjd_prompt = _fill((PROJECT_ROOT / "tla_eval/tasks/spin/prompts/plain-js/direct_call_nosemantics.txt").read_text(encoding="utf-8"), src)
     tla_prompt = _fill((PROJECT_ROOT / "tla_eval/tasks/spin/prompts/direct_call_constrained.txt").read_text(encoding="utf-8"), src)
 
     RESULTS_FILE.parent.mkdir(parents=True, exist_ok=True)
     results = json.loads(RESULTS_FILE.read_text(encoding="utf-8")) if RESULTS_FILE.exists() else {}
+    specs_dir = PROJECT_ROOT / "output" / "study_specs"
+    specs_dir.mkdir(parents=True, exist_ok=True)
 
-    # js  = deployed JS-SAM prompt (does NOT state the single-step semantics)
-    # jsc = constrained JS-SAM prompt (same semantics block as the TLA arm)
-    # pjs = plain-JS next(state,action,data) — no SAM, two keys — isomorphic to the TLA relation
+    # 2x2 factorial in (contract, prompt) + the TLA+ reference arm:
+    # js  = SAM contract,  deployed prompt (no single-step semantics block)
+    # jsc = SAM contract,  constrained prompt (same semantics block as TLA arm)
+    # pjd = lean contract, NO semantics block (transitions derived from source)
+    # pjs = lean contract, constrained prompt (semantics block)
     # tla = constrained TLA+ prompt
     _js_extract = lambda t: JSB.extract_artifacts(t).spec
-    arms = [("js", js_prompt, score_js, _js_extract),
-            ("jsc", jsc_prompt, score_js, _js_extract),
-            ("pjs", pjs_prompt, score_pjs, _js_extract),
-            ("tla", tla_prompt, score_tla, _extract_tla)]
+    arms = [("js", js_prompt, score_js, _js_extract, ".js"),
+            ("jsc", jsc_prompt, score_js, _js_extract, ".js"),
+            ("pjd", pjd_prompt, score_pjs, _js_extract, ".js"),
+            ("pjs", pjs_prompt, score_pjs, _js_extract, ".js"),
+            ("tla", tla_prompt, score_tla, _extract_tla, ".tla")]
 
     for model in args.models:
         for gen in range(args.n):
-            for lang, prompt, scorer, extract in arms:
+            for lang, prompt, scorer, extract, ext in arms:
                 key = f"{model}|{lang}|{gen}"
                 if key in results:
                     continue
@@ -138,7 +144,12 @@ def main():
                 if not resp.success:
                     results[key] = {"statuses": ["unscoreable"] * NW, "error": resp.error_message}
                 else:
-                    results[key] = {"statuses": scorer(extract(resp.generated_text))}
+                    spec_text = extract(resp.generated_text)
+                    # Save the spec so uniqueness/inspection audits don't need regeneration.
+                    spec_file = specs_dir / f"{model}_{lang}_{gen}{ext}"
+                    spec_file.write_text(spec_text, encoding="utf-8")
+                    results[key] = {"statuses": scorer(spec_text),
+                                    "spec_file": str(spec_file.relative_to(PROJECT_ROOT))}
                 RESULTS_FILE.write_text(json.dumps(results, indent=0), encoding="utf-8")
                 st = results[key]["statuses"]
                 print(f"{key}: pass={st.count('pass')}/{NW} fail={st.count('fail')} unscoreable={st.count('unscoreable')}", flush=True)
@@ -158,13 +169,14 @@ def main():
         return acc
 
     print("\n===== PASS RATES (mean over N generations) =====")
-    print(f"{'model':8s} {'JS(depl)':>9s} {'JS(constr)':>11s} {'plainJS':>8s} {'TLA(constr)':>12s}")
+    print("2x2 factorial: contract (SAM / lean) x prompt (no semantics / semantics) + TLA reference")
+    print(f"{'model':8s} {'SAM+none':>9s} {'SAM+sem':>9s} {'lean+none':>10s} {'lean+sem':>9s} {'TLA(constr)':>12s}")
     for model in args.models:
         row = []
-        for lang in ("js", "jsc", "pjs", "tla"):
+        for lang in ("js", "jsc", "pjd", "pjs", "tla"):
             flat = [x for s in gather(model, lang) for x in s]
             row.append(f"{uncond(flat):.1f}%" if flat else "n/a")
-        print(f"{model:8s} {row[0]:>9s} {row[1]:>11s} {row[2]:>8s} {row[3]:>12s}")
+        print(f"{model:8s} {row[0]:>9s} {row[1]:>9s} {row[2]:>10s} {row[3]:>9s} {row[4]:>12s}")
 
     print("\n===== DESCRIPTIVE window discordance (b=first-only pass, c=TLA-only pass) =====")
     print("JS(constr) vs TLA isolates the language; plainJS vs TLA isolates SAM's machinery.")

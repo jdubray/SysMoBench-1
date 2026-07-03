@@ -33,7 +33,10 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 RESULTS_FILE = PROJECT_ROOT / "output" / "tla_phase3_study.json"
 
 MODELS = ["claude", "fable", "sonnet", "haiku"]
-ARMS = ["js", "jsc", "pjs", "tla"]
+# 2x2 factorial in (contract, prompt) + the TLA+ reference arm:
+#   js  = SAM  contract, no semantics block     jsc = SAM  contract, semantics block
+#   pjd = lean contract, no semantics block     pjs = lean contract, semantics block
+ARMS = ["js", "jsc", "pjd", "pjs", "tla"]
 NW = 28
 
 
@@ -108,14 +111,37 @@ def main():
 
     print("\n===== 3. GENERATION-LEVEL EXACT PERMUTATION TEST (unit = generation, =====")
     print("=====    diff in mean pass rate, all C(10,5)=252 splits, two-sided)  =====")
+    print("vs TLA reference, then the four factorial contrasts:")
+    print("  prompt effect  | SAM:  js vs jsc    lean: pjd vs pjs")
+    print("  contract effect| none: js vs pjd    sem:  jsc vs pjs")
     print(f"{'model':8s} {'comparison':>16s} {'mean diff':>10s} {'p (exact)':>10s}")
+    comparisons = (
+        ("jsc", "tla"), ("pjs", "tla"), ("pjd", "tla"), ("js", "tla"),
+        ("js", "jsc"),   # prompt effect within SAM
+        ("pjd", "pjs"),  # prompt effect within lean
+        ("js", "pjd"),   # contract effect without semantics
+        ("jsc", "pjs"),  # contract effect with semantics
+    )
     for m in MODELS:
-        for a, b in (("jsc", "tla"), ("pjs", "tla"), ("js", "tla")):
+        for a, b in comparisons:
+            if (m, a) not in cells or (m, b) not in cells:
+                continue
             xs = [sum(1 for s in fp if s == "pass") / NW for fp in cells[(m, a)].values()]
             ys = [sum(1 for s in fp if s == "pass") / NW for fp in cells[(m, b)].values()]
             diff, p = perm_test(xs, ys)
             star = "*" if p < 0.05 else " "
             print(f"{m:8s} {a + ' vs ' + b:>16s} {diff:>10.3f} {p:>9.4f}{star}")
+
+    print("\n===== 3b. THE 2x2 (mean pass rate; rows=contract, cols=prompt) =====")
+    for m in MODELS:
+        def mean(arm):
+            if (m, arm) not in cells:
+                return None
+            vals = [sum(1 for s in fp if s == "pass") / NW for fp in cells[(m, arm)].values()]
+            return 100 * sum(vals) / len(vals)
+        js, jsc, pjd, pjs = mean("js"), mean("jsc"), mean("pjd"), mean("pjs")
+        fmt = lambda v: f"{v:5.1f}%" if v is not None else "  n/a "
+        print(f"{m:8s}  SAM : none={fmt(js)}  sem={fmt(jsc)}   lean: none={fmt(pjd)}  sem={fmt(pjs)}")
 
     print("\n===== 4. UNIQUE-SOLUTION-LEVEL VIEW (pass rate per distinct fingerprint) =====")
     for m in MODELS:

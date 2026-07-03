@@ -118,12 +118,20 @@ not the language. Each successive arm removes one alternative explanation:
   TLA+ relation. `plain-JS` vs `TLA(constrained)` isolates the *SAM pattern's
   machinery*: same language as the JS arms, but the minimal declarative shape of
   the TLA+ arm.
+- **plain-JS(no-semantics)** — *(added after review: the arms above form an
+  incomplete 2×2 in (contract, prompt) — the lean arm always carried the
+  semantics block.)* The identical lean contract with the semantics block
+  removed; the model derives the transition semantics from the source alone.
+  Completes the factorial: prompt effect within each contract, contract effect
+  at each prompt level.
 - **TLA(constrained)** — the constrained TLA+ relation.
 
 Reading the arms in order attributes the gap to a single cause. If the residual
 under `JS(constrained)` disappears under `plain-JS`, the cause is the SAM
 contract's wiring (proposals/acceptors + mandatory auxiliary state), not the
-language and not "formal vs informal." (It does — see §7.)
+language and not "formal vs informal." (It does — see §7; and the completed
+factorial shows the lean contract reaches 100% even *without* the semantics
+block, so the contract effect is unconditional on prompt semantics.)
 
 ---
 
@@ -200,10 +208,10 @@ Phase-3 mode as a first-class controlled condition alongside the agent path.
   `.../plain-js/direct_call.txt` (plain-JS).
 - Replay paths: `scripts/tla_direct_tv.py` (direct TLC), `scripts/plain_js_tv.py`
   + `tools/plain-js/tv.mjs` (sandboxed plain-JS).
-- Paired driver (four arms, N=5): `scripts/tla_phase3_study.py`
-  (resumable; raw per-window data in `output/tla_phase3_study.json`);
-  generation-level analysis (uniqueness + exact permutation test):
-  `scripts/tla_phase3_analysis.py`.
+- Paired driver (2×2 factorial + TLA arm, N=5): `scripts/tla_phase3_study.py`
+  (resumable; raw per-window data in `output/tla_phase3_study.json`; spec texts
+  saved under `output/study_specs/`); generation-level analysis (uniqueness +
+  exact permutation test + factorial contrasts): `scripts/tla_phase3_analysis.py`.
 - Corpus + capture harness: `data/sys_traces/spin/`, `scripts/harness/spin/run.sh`.
 - Design + pre-registration: `docs/js_sam_tla_phase3_plan.md`;
   results: `docs/js_sam_tla_phase3_results.md`.
@@ -214,21 +222,27 @@ Phase-3 mode as a first-class controlled condition alongside the agent path.
 
 Pass rate (mean over N=5; `spin`; 0 unscoreable in the three constrained arms):
 
-| Model | JS(deployed) | JS(constrained) | plain-JS | TLA+(constrained) |
-|---|---|---|---|---|
-| Opus 4.8   | 81.4% | 89.3% | **100%** | 100% |
-| Fable 5    | 57.9% | 95.7% | **100%** | 100% |
-| Sonnet 4.6 | 50.0% | 100%  | **100%** | 100% |
-| Haiku 4.5  | 28.6% | 40.7% | **100%** | 100% |
+| Model | SAM+none | SAM+sem | lean+none | lean+sem | TLA+ |
+|---|---|---|---|---|---|
+| Opus 4.8   | 81.4% | 89.3% | **100%** | **100%** | 100% |
+| Fable 5    | 57.9% | 95.7% | **100%** | **100%** | 100% |
+| Sonnet 4.6 | 50.0% | 100%  | **100%** | **100%** | 100% |
+| Haiku 4.5  | 28.6% | 40.7% | **100%** | **100%** | 100% |
 
-Reading the arms in order:
-1. **Prompt** explains most of the raw reversal — the semantics block alone lifts
-   JS-SAM sharply (Fable 58→96%, Sonnet 50→100%).
-2. **Language** does *not* explain the residual — plain-JS ties TLA+ at 100% for
-   every model (identical outcomes in every generation; Δ=0, no test needed).
-3. **The SAM pattern's machinery** is the whole residual: the same JavaScript, in a
-   minimal declarative `next()` shape, is perfect; wrapped in SAM's
-   proposals/acceptors + mandatory auxiliary state, it is not (Haiku 40.7% → 100%).
+Reading the completed factorial (lean+none added after review; 100% for every
+model — all 20 generations, 5/5 unique texts per model):
+1. **Contract** is the dominant, uniform factor: SAM→lean is significant for all
+   four models with no semantics block in either prompt (Δ .186–.714, all at the
+   permutation floor), and the lean contract reaches ceiling regardless of prompt.
+2. **Prompt** is real but model-dependent: the semantics block lifts Fable
+   (58→96%) and Sonnet (50→100%) within SAM, but moves Opus and Haiku
+   insignificantly — the earlier "prompt explains most" reading was an artifact
+   of examining only the SAM column.
+3. **Language** does *not* explain anything measurable — plain-JS ties TLA+ at
+   100% for every model (identical outcomes in every generation; Δ=0).
+4. **Ceiling honesty**: with lean+none = lean+sem = TLA+ = 100%, effect ordering
+   among the perfect cells (and any prompt×contract interaction) is not
+   identifiable; what is identifiable is contract ≥ prompt for every model.
 
 The dividing line is spec *structure* (minimal single-step transition relation),
 not language family. Design implication for SysMoBench: a leaner JS-SAM spec
