@@ -52,29 +52,34 @@ non-formal-language backend --- JavaScript specifications in the SAM
 pattern, whose semantics deliberately mirror \tlaplus{} --- to test whether
 LLMs model systems more faithfully in a language abundant in their training
 data. We instrument the Asterinas kernel spinlock for ground-truth traces
-and evaluate four Claude models end to end. Trace conformance is the only
+and evaluate four Claude models end to end, culminating in a
+pre-registered, paired comparison completed after review to a full
+$3{\times}2$ factorial: contract (SAM / lean / \tlaplus{}) $\times$ prompt
+(with / without spec-level semantics), $N{=}5$ generations per cell.
+
+Trace conformance is the only
 phase that discriminates (0--86.4\% on state-changing windows, against an
 identity base rate the weakest model exactly matches; the other phases are
 unanimous, one pass provably vacuous), and one round of trace feedback
 repairs some specifications completely --- audited as root-cause fixes, not
-memorization. JavaScript reaches an evaluable artifact 4/4 times versus 1/4
-for \tlaplus{}, a gap of guardrails rather than capability. A
-pre-registered, paired, controlled comparison --- completed after review to
-a full $3{\times}2$ factorial: contract (SAM / lean / \tlaplus{}) $\times$
-prompt (with / without spec-level semantics) --- then resolves
+memorization. A default-prompt evaluability gap (JavaScript 4/4 vs.\
+\tlaplus{} 1/4) decomposes into a known TLC idiom trap and a harness fault,
+and vanishes under a one-line guardrail. The factorial then resolves
 the language question in an unexpected place: the specification
 \emph{contract} is the dominant, uniform factor. A bare
 \texttt{next(state, action, model)} function, structurally isomorphic to the
 \tlaplus{} relation, ties \tlaplus{} at 100\% for every model \emph{with or
 without spec-level semantics in the prompt}, while prompt prescriptiveness
 --- large enough to masquerade as a language effect --- moves only two of
-four models within the SAM contract. The result is validated by 40/40
-model-generated lean-contract specifications passing every phase across two
-tasks. On this
-evidence, what governs LLM specification quality is the shape of the
-specification contract first, the prompt second (a real but model-dependent
-factor), and the language not measurably at all. We report a single-system
-case study with its corrections documented in-line.
+four models within the SAM contract. The single cross-language split
+(derivation mode) traces to the conformance oracle's totality requirement
+penalizing idiomatic enabling-condition \tlaplus{}; scored paradigm-fairly,
+it too is a tie. The result is validated by 40/40 model-generated
+lean-contract specifications passing every phase across two tasks. On the
+tasks tested, contract shape came first, the prompt second (a real but
+model-dependent factor), and the language nowhere --- a conclusion
+conditional on the spinlock factorial pending richer-task replication. We
+report a single-system case study with its corrections documented in-line.
 \end{abstract}
 
 \section{Introduction}
@@ -152,10 +157,12 @@ spinlock~\cite{asterinas}):
   axis from one-shot accuracy --- capable models repair fully (verified by a
   held-out generalization audit as fixes, not memorization), the weakest not
   at all, with mid-tier outcomes unstable at $N{=}1$.
-\item \textbf{A \jssam{}-vs-\tlaplus{} head-to-head} (\S\ref{sec:vstla}):
-  with identical models and task, 4/4 \jssam{} specifications reach
-  end-to-end evaluability versus 1/4 for \tlaplus{}, with each \tlaplus{}
-  failure attributed to a specific structural cause.
+\item \textbf{A \jssam{}-vs-\tlaplus{} evaluability comparison}
+  (\S\ref{sec:vstla}): 4/4 \jssam{} specifications reach end-to-end
+  evaluability versus 1/4 for \tlaplus{} --- reported strictly per cause
+  (a known TLC idiom trap twice, a harness fault once) and shown to vanish
+  under a one-line prompt guardrail: a default-prompt robustness
+  observation, not a language-capability finding.
 \item \textbf{A controlled cross-language conformance study}
   (\S\ref{sec:crosslang}): a pre-registered, paired design, completed after
   review to a full $3{\times}2$ factorial in (contract, prompt)
@@ -172,6 +179,11 @@ spinlock~\cite{asterinas}):
   (\S\ref{sec:locksvc}).
 \end{enumerate}
 
+In light of the results, we regard the trace-capture methodology (2), the
+controlled-comparison methodology (6), and the contract-shape finding as the
+primary contributions; the \jssam{} backend (1) is the vehicle that surfaced
+them, and its own results argue for the lean revision of its contract.
+
 We emphasize scope honestly: the controlled experiments concern one system
 --- the spinlock --- and a 28-window trace corpus (the lean-contract
 validation extends to a second task with its own 60-window corpus);
@@ -179,7 +191,10 @@ Experiments 1--3 are single-generation, with $N{=}5$ replication in
 Experiment 4 and the lean studies. We present it as a case study whose
 value lies in the precision of the failure attribution and the reproducibility
 of the pipeline, not as a settled verdict on the hypothesis
-(\S\ref{sec:limitations}).
+(\S\ref{sec:limitations}). Corrections made under review are kept in-line
+where they changed a claim --- the corrections are themselves findings ---
+at a deliberate cost in linearity; readers wanting only the current claims
+can rely on the tables, \S\ref{sec:discussion}, and \S\ref{sec:conclusion}.
 
 \section{Background}
 \label{sec:background}
@@ -636,8 +651,9 @@ at Phase 2: whether the specification is actually \emph{checkable}. All four
 \paragraph{Cause 1: a \tlaplus{} semantic pitfall JavaScript does not have.}
 Opus and Sonnet both modeled ``no lock owner'' as
 \texttt{NULL == CHOOSE v : v \textbackslash notin Threads}. SANY accepts
-this --- syntax passes --- but TLC cannot evaluate an unbounded
-\texttt{CHOOSE}, so model checking fails. The idiom is natural, looks
+this --- syntax passes --- but TLC cannot enumerate a \texttt{CHOOSE} whose
+bound variable ranges over an unbounded domain (\texttt{CHOOSE} itself is
+deterministic), so model checking fails. The idiom is natural, looks
 correct, and is a well-known TLC trap --- though the indictment is of LLM
 \tlaplus{} fluency rather than of the language: no experienced \tlaplus{}
 author models absence this way, and agentic workflows already write around
@@ -664,13 +680,16 @@ other's does not.
 
 \paragraph{Net.}
 On this task, models reach an end-to-end evaluable specification far more
-readily in \jssam{} (4/4 through Phase 4) than in \tlaplus{} (1/4). This is
-direct --- though single-task --- evidence for the hypothesis in its
-practical form: \emph{host-language familiarity plus a self-contained
-executable artifact lowers the barrier to a usable specification.} It does
-not, by itself, show that \jssam{} specifications are more \emph{faithful};
-it shows they are far more often checkable at all, which is the precondition
-for faithfulness to be measured. Experiment 4 (\S\ref{sec:crosslang})
+readily in \jssam{} (4/4 through Phase 4) than in \tlaplus{} (1/4). Read
+narrowly, this is evidence for the hypothesis in its practical form:
+\emph{host-language familiarity plus a self-contained executable artifact
+lowers the barrier to a usable specification.} It does not, by itself, show
+that \jssam{} specifications are more \emph{faithful}; it shows they are
+far more often checkable at all, which is the precondition for faithfulness
+to be measured. And given the per-cause attribution above and the guardrail
+result of \S\ref{sec:crosslang}, we treat the 4/4-vs-1/4 figure throughout
+this paper as a within-experiment observation about default-prompt
+robustness, not a conclusion about the languages. Experiment 4 (\S\ref{sec:crosslang})
 measures faithfulness directly, under a design built to make the two
 languages comparable --- and resolves it in an unexpected place.
 
@@ -726,6 +745,28 @@ branching factor is 1. The \tlaplus{} results below are therefore earned
 under a relation as strict as the JS one, not inflated by existential
 slack.
 
+Two commitments of this oracle must be named, because they are
+modeling-paradigm choices rather than neutral ground. First, requiring
+every trace event to map onto a named, \emph{total}, successor-producing
+action is the lean/JS paradigm by construction. Idiomatic \tlaplus{}
+specifies \emph{enabling conditions} and relies on stuttering
+($[\mathit{Next}]_{\mathit{vars}}$ always admits
+$\mathit{vars}' = \mathit{vars}$): a failed acquisition is naturally a
+disabled action plus a stutter, which this oracle scores as
+\emph{unscoreable} rather than as a legitimate no-op --- penalizing
+enabling-condition specifications independent of their correctness.
+Wherever the cross-language comparison is drawn, we therefore report the
+conditional (paradigm-fair) score alongside the unconditional one, and we
+flag a stutter-aware oracle --- a $post = pre$ window satisfiable by a
+stuttering step --- as the fairer instrument for such specifications.
+Second, the functional branching-factor-1 requirement encodes a
+determinism assumption that holds here only because the trace scenarios
+are deterministic by construction; for genuinely concurrent systems a
+relational next-state is fidelity, not over-permissiveness, and the oracle
+must weaken to set-conformance (traced post-state in the one-step image,
+with tightness reported separately) before this methodology reaches
+Raft-class protocols.
+
 \paragraph{Four arms, because the prompt and the contract are both confounds.}
 An initial two-arm run (deployed \jssam{} prompt vs.\ constrained \tlaplus{})
 produced what looked like a decisive \tlaplus{} reversal. But the constrained
@@ -763,8 +804,8 @@ semantics block removed, so the model must derive the transition semantics
 from the Rust source alone. A mirrored \tlaplus{} derivation arm (the
 constrained \tlaplus{} contract, semantics block likewise removed) was added
 alongside it, completing the $3{\times}2$ of Table~\ref{tab:crosslang}; its
-result --- the study's only cross-language split --- responds to a
-review-identified limitation and is reported with that audit trail in
+result --- the study's only cross-language split --- is analyzed in the
+findings below, with the full audit trail preserved in
 \S\ref{sec:limitations}.
 
 \paragraph{Replication, pairing, and checkability.}
@@ -778,10 +819,15 @@ record is therefore at the generation level: we report per-arm uniqueness
 counts and an exact two-sided permutation test with the \emph{generation} as
 the unit (statistic: difference in mean per-generation pass rate; all
 $\binom{10}{5}=252$ relabelings; the smallest attainable $p$ is
-$2/252\approx0.0079$, so starred results sit at the test's floor). The
+$2/252\approx0.0079$, so starred results sit at the test's floor). Because
+the generations collapse to so few distinct behaviors, we present $\Delta$
+as the primary quantity and read the permutation $p$-values as descriptive
+rather than as hypothesis tests: the effect sizes are large and uniform;
+the inferential machinery around them is at its resolution floor. The
 pre-registered checkability policy (conditional vs.\ unconditional scoring)
-proved moot: \emph{zero} windows were unscoreable in any constrained or
-plain-JS generation.
+proved moot in the constrained arms: \emph{zero} windows were unscoreable
+in any constrained or plain-JS generation. (It becomes load-bearing in the
+derivation arms below.)
 
 \subsection{Results}
 
@@ -815,7 +861,9 @@ retracted). ``Unique'' = distinct behavioral fingerprints (per-window outcome
 vectors) among the 5 generations of each arm, ordered deployed-JS /
 constrained-JS / plain-JS / \tlaplus{}. $\Delta$ = difference in mean
 per-generation pass rate vs.\ \tlaplus{}; $p$ from the exact permutation test
-($^{*}$ = $p<0.05$; $0.0079$ is the smallest attainable value). The plain-JS
+($^{*}$ = $p<0.05$; $0.0079$ is the smallest attainable value; given 1--2
+unique behaviors per cell, read $\Delta$ as the primary quantity and $p$
+descriptively). The plain-JS
 arm is omitted: it ties \tlaplus{} in every generation ($\Delta{=}0$, $p{=}1$).}
 \label{tab:mcnemar}
 \small
@@ -872,12 +920,34 @@ the \texttt{locksvc} replication (\S\ref{sec:locksvc}) shows the lean result
 generalizing to a richer state, but the factorial has not yet been re-run
 there.
 
+\paragraph{The derivation arms split the languages --- and the split is the
+oracle's paradigm, not the language.}
+With the semantics block removed from both minimal contracts, lean JS
+reaches 100\% for every model while \tlaplus{} falls to 78.6--100\%
+($\Delta{=}.214$ for Opus and Sonnet, at the permutation floor;
+Table~\ref{tab:crosslang}). The mechanism contains no wrong post-states:
+every \tlaplus{} shortfall window is \emph{unscoreable}, because unguided
+models write the idiomatic guarded action (enabled only when the lock is
+free), and under this oracle a disabled action on a pinned contention
+pre-state has no successor. The lean contract's \emph{totality} forbids
+that idiom structurally; \tlaplus{} permits it; and the semantics block's
+``held $\Rightarrow$ unchanged'' clause is precisely what converts the
+guard into a no-op branch. Scored conditionally --- the paradigm-fair
+reading, per the oracle commitments stated in the design --- the
+guard-idiom specifications are 100\% correct on every window they can
+replay, and the languages tie here too. ``Contract first, prompt second''
+therefore refines to: \emph{the prompt matters exactly where the contract
+under-constrains} --- and the unconditional split is a fact about the
+oracle's paradigm, reported as headline only because the benchmark's
+deployed scoring is unconditional.
+
 \paragraph{A real, one-directional residual survives the prompt control.}
 With identical semantics in both prompts, \tlaplus{} reaches 100\%
 conformance for \emph{every model and every generation}, while constrained
 \jssam{} does so only for Sonnet. At the generation level the residual is
-significant for Opus and Haiku (both at the permutation floor,
-$p{=}.0079$), vanishes for Sonnet, and for Fable is \emph{not} significant
+large for Opus and Haiku (both at the permutation floor,
+$p{=}.0079$, read descriptively), vanishes for Sonnet, and for Fable does
+not replicate
 ($\Delta{=}.043$, $p{=}.44$) --- the pooled McNemar had starred Fable's
 deficit, and that specific claim was pseudo-replication, now withdrawn. The
 residual is largest for the weakest model (Haiku: 40.7\% vs.\ 100\%), and
@@ -1226,7 +1296,10 @@ We state these plainly; the study is a case study and should be read as one.
   40 saved model-generated lean specifications pass them on both tasks.
 \item \textbf{Model family.} All four models are from one vendor. The
   benchmark's configuration already includes other vendors' models; the
-  comparison should be broadened before generalizing.
+  comparison should be broadened before generalizing. A further
+  reproducibility caution: several of the exact model versions used here
+  may not be externally accessible; the saved specifications and raw
+  per-window data, not the model identifiers, are the reproducible objects.
 \item \textbf{Missing arms, with status.} Review enumerated the
   acknowledged-but-load-bearing gaps; their current state: the
   \emph{derivation arms} (no semantics block, both languages) are now run
@@ -1276,6 +1349,31 @@ workflows can saturate current SysMoBench tasks in \tlaplus{}; our repair
 experiment probes the smallest unit of such a workflow (one counterexample
 round) across models.
 
+\paragraph{The wider LLM$\times$formal-methods field.}
+A relevance-ranked sweep of the 2022--2026 literature (40 works; the map
+ships with the artifacts) places this study in a thin slice of a
+fast-moving field. The center of gravity is autoformalization and theorem
+proving --- Lean/Isabelle proof generation and
+repair~\cite{wu2022autoformalization,yang2023leandojo,first2023baldur} ---
+followed by loop-invariant and precondition generation for deductive
+verification~\cite{chakraborty2023ranking}. Specification-focused work
+concentrates on natural-language-to-temporal-logic
+translation~\cite{cosler2023nl2spec} and declarative-specification
+repair~\cite{ese2025repair}; benchmarks are proliferating (e.g., OSVBench
+for OS-verification specification generation~\cite{osvbench2025}) but grade
+against reference specifications, proof success, or human judgment rather
+than execution-trace ground truth. Against that corpus, this study's two
+distinctive commitments --- conformance to traces captured from the running
+system as the discriminating oracle, and a controlled
+contract$\times$prompt$\times$language factorial --- are both minority
+positions. The closest contemporaneous works, an NL-to-\tlaplus{}
+correctness evaluation and counterexample-driven \tlaplus{}
+repair~\cite{nl2tla2026,tracefix2026}, each parallel a single axis of the
+design here (one-shot generation; repair); the repair-as-separate-axis
+finding of Experiment 2 matches an emerging pattern across proof
+repair~\cite{first2023baldur} and specification
+repair~\cite{ese2025repair}.
+
 \paragraph{Trace conformance for specifications.}
 Validating specifications against implementation traces has industrial
 precedent: MongoDB's eXtreme modeling checked \tlaplus{} models against
@@ -1324,9 +1422,10 @@ relation ties \tlaplus{} at 100\% for every model, with or without
 spec-level semantics in the prompt.
 
 The hypothesis that motivated the backend is neither confirmed nor dead; it
-is answered more usefully than either. Stated plainly, the completed study
-ranks what governs LLM specification quality: \emph{contract shape first,
-prompt second, language nowhere}. Familiarity buys \emph{checkability};
+is answered more usefully than either. Stated plainly, on the tasks tested
+the completed study ranks what governed LLM specification quality:
+\emph{contract shape first, prompt second, language nowhere} --- a ranking
+conditional on the spinlock factorial until replicated on a richer task. Familiarity buys \emph{checkability};
 contract minimality buys \emph{transcription fidelity} --- unconditionally:
 the lean-without-semantics cell reaches 100\% for every model, including the
 weakest at 28.6\% under the SAM contract, so every model \emph{derives} the
@@ -1383,7 +1482,11 @@ the controlled replay, for ecological validity; (5)~a \tlaplus{} repair
 round for symmetry with Experiment 2; and (6)~replication beyond one model
 family. We are contributing the backend, harnesses, drivers, corpora, and
 the controlled-comparison methodology upstream so these can be run --- and
-challenged --- by the community.
+challenged --- by the community. One such test is already underway as this
+is written: a real-world study on a production-grade distributed state
+machine --- point of sale, payment terminal, and payment backend across a
+payment transaction's lifecycle --- is running the same
+\jssam{}-vs-\tlaplus{} comparison, and will be reported separately.
 
 \section*{Acknowledgments}
 We thank the SysMoBench / Specula maintainers for the benchmark, the
@@ -1415,7 +1518,9 @@ prototype and full-pipeline studies (\texttt{tools/plain-js/},
 the \texttt{locksvc} harness and corpus
 (\texttt{scripts/harness/locksvc/}, \texttt{data/sys\_traces/locksvc/}), and
 the methodology note
-(\texttt{paper/methodology.md}) --- and the experiment write-ups
+(\texttt{paper/methodology.md}), and the literature map
+(\texttt{paper/literature\_map.md}) --- and the experiment
+write-ups
 (\texttt{docs/js\_sam\_*.md}) in the SysMoBench fork at
 \url{https://github.com/jdubray/SysMoBench-1}, staged as stacked pull
 requests against \url{https://github.com/specula-org/SysMoBench}.
@@ -1499,6 +1604,53 @@ Asterinas project.
 Specula project.
 \newblock Specula: an agent specialized in TLA+ formal modeling.
 \newblock \url{https://github.com/specula-org/Specula}.
+
+\bibitem{wu2022autoformalization}
+Y.~Wu, A.~Q. Jiang, W.~Li, M.~Rabe, C.~Staats, M.~Jamnik, and C.~Szegedy.
+\newblock Autoformalization with large language models.
+\newblock In \emph{NeurIPS}, 2022.
+
+\bibitem{yang2023leandojo}
+K.~Yang et~al.
+\newblock LeanDojo: Theorem proving with retrieval-augmented language models.
+\newblock In \emph{NeurIPS}, 2023.
+
+\bibitem{first2023baldur}
+E.~First, M.~Rabe, T.~Ringer, and Y.~Brun.
+\newblock Baldur: Whole-proof generation and repair with large language
+  models.
+\newblock In \emph{ESEC/FSE}, 2023.
+
+\bibitem{cosler2023nl2spec}
+M.~Cosler, C.~Hahn, D.~Mendoza, F.~Schmitt, and C.~Trippel.
+\newblock nl2spec: Interactively translating unstructured natural language to
+  temporal logics with large language models.
+\newblock In \emph{CAV}, 2023.
+
+\bibitem{chakraborty2023ranking}
+S.~Chakraborty et~al.
+\newblock Ranking LLM-generated loop invariants for program verification.
+\newblock In \emph{Findings of EMNLP}, 2023.
+
+\bibitem{osvbench2025}
+OSVBench: Benchmarking LLMs on specification generation tasks for operating
+  system verification.
+\newblock arXiv:2504.20964, 2025.
+
+\bibitem{ese2025repair}
+An empirical evaluation of pre-trained large language models for repairing
+  declarative formal specifications.
+\newblock \emph{Empirical Software Engineering}, 2025.
+\newblock doi:10.1007/s10664-025-10687-1.
+
+\bibitem{nl2tla2026}
+Can LLMs write correct TLA+ specifications? Evaluating
+  natural-language-to-TLA+.
+\newblock 2026. Contemporaneous work, located via literature search.
+
+\bibitem{tracefix2026}
+TraceFix: Repairing agent coordination protocols with TLA+ counterexamples.
+\newblock 2026. Contemporaneous work, located via literature search.
 
 \end{thebibliography}
 
