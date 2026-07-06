@@ -1,0 +1,24 @@
+BUG 1 - cancel during INITIATING strands a live transfer (I1, I3 violated)
+Config: bug1_earlycancel.cfg (EARLY_CANCEL=TRUE, no other failure modes).
+TLC: Invariant Inv_I1_NoLostCharge violated, 7-state trace (raw: bug1_earlycancel.raw.txt).
+
+ 1. IDLE                        initial state
+ 2. INITIATE_PAYMENT            staff starts payment (startPayment, terminal-payment.ts:1354)
+ 3. createSale NAP fires        request in flight to Finix (NAP :980-987 -> runCreateSale :442)
+ 4. CANCEL_PAYMENT              staff cancels while INITIATING (FSM allows it, :234)
+                                txState=CANCELLING, model.transferId=null
+ 5. cancel NAP fires            cancelTerminalSale finds NOTHING at Finix (transfer not
+                                created yet); verifyAndResolve has no transferId to probe
+                                (:1014 knownTransferId=null, :1021 skips probe)
+                                -> _cancelConfirmed (:1040) -> txState=CANCELLED
+ 6. Finix processes the POST    transfer created, state=PENDING - the in-flight request
+                                from step 3 lands AFTER the device cancel. The response's
+                                TRANSFER_CREATED dispatch is FSM-rejected in CANCELLED
+                                (:915 guard), so the POS never learns the transferId.
+ 7. customer taps               terminal still shows the prompt; transfer -> SUCCEEDED.
+
+Final: txState=CANCELLED, finixState=SUCCEEDED, paymentRecorded=FALSE, breadcrumb=FALSE.
+The customer was charged; the POS says cancelled; no pending_terminal_sales row exists
+(that is only written on the verification path, :604-611), so no sweep will ever find it.
+Assumption to validate against Finix docs: PUT /devices/:id {action:CANCEL} does not
+cancel a POST /transfers that is still propagating (device-scoped, not key-scoped).

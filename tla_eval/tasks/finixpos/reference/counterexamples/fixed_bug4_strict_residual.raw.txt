@@ -1,0 +1,158 @@
+Error: Invariant Inv_I1_Strict is violated.
+Error: The behavior up to this point is:
+State 1: <Initial predicate>
+/\ breadcrumb = FALSE
+/\ cancelDone = FALSE
+/\ paymentRecorded = FALSE
+/\ dbFailed = FALSE
+/\ transferId = "none"
+/\ createdBy = 0
+/\ finixState = "none"
+/\ declineCode = "none"
+/\ refundIssued = FALSE
+/\ amountCents = -1
+/\ orderId = "none"
+/\ finixAmount = -1
+/\ paymentId = "none"
+/\ approvedAmountCents = -1
+/\ finixCode = "none"
+/\ attempt = 0
+/\ txState = "IDLE"
+
+State 2: <Next line 387, col 7 to line 387, col 79 of module FinixPOSFixedEnv>
+/\ breadcrumb = FALSE
+/\ cancelDone = FALSE
+/\ paymentRecorded = FALSE
+/\ dbFailed = FALSE
+/\ transferId = "none"
+/\ createdBy = 0
+/\ finixState = "none"
+/\ declineCode = "none"
+/\ refundIssued = FALSE
+/\ amountCents = 10
+/\ orderId = "O1"
+/\ finixAmount = -1
+/\ paymentId = "none"
+/\ approvedAmountCents = -1
+/\ finixCode = "none"
+/\ attempt = 0
+/\ txState = "INITIATING"
+
+State 3: <NapCreateStart line 111, col 3 to line 114, col 82 of module FinixPOSFixedEnv>
+/\ breadcrumb = FALSE
+/\ cancelDone = FALSE
+/\ paymentRecorded = FALSE
+/\ dbFailed = FALSE
+/\ transferId = "none"
+/\ createdBy = 0
+/\ finixState = "none"
+/\ declineCode = "none"
+/\ refundIssued = FALSE
+/\ amountCents = 10
+/\ orderId = "O1"
+/\ finixAmount = -1
+/\ paymentId = "none"
+/\ approvedAmountCents = -1
+/\ finixCode = "none"
+/\ attempt = 1
+/\ txState = "INITIATING"
+
+State 4: <RespLost line 162, col 3 to line 165, col 82 of module FinixPOSFixedEnv>
+/\ breadcrumb = FALSE
+/\ cancelDone = FALSE
+/\ paymentRecorded = FALSE
+/\ dbFailed = FALSE
+/\ transferId = "none"
+/\ createdBy = 0
+/\ finixState = "none"
+/\ declineCode = "none"
+/\ refundIssued = FALSE
+/\ amountCents = 10
+/\ orderId = "O1"
+/\ finixAmount = -1
+/\ paymentId = "none"
+/\ approvedAmountCents = -1
+/\ finixCode = "none"
+/\ attempt = 2
+/\ txState = "INITIATING"
+
+State 5: <RespLost line 162, col 3 to line 165, col 82 of module FinixPOSFixedEnv>
+/\ breadcrumb = FALSE
+/\ cancelDone = FALSE
+/\ paymentRecorded = FALSE
+/\ dbFailed = FALSE
+/\ transferId = "none"
+/\ createdBy = 0
+/\ finixState = "none"
+/\ declineCode = "none"
+/\ refundIssued = FALSE
+/\ amountCents = 10
+/\ orderId = "O1"
+/\ finixAmount = -1
+/\ paymentId = "none"
+/\ approvedAmountCents = -1
+/\ finixCode = "none"
+/\ attempt = 3
+/\ txState = "INITIATING"
+
+State 6: <LastGaspResolveDbFail line 216, col 3 to line 226, col 48 of module FinixPOSFixedEnv>
+/\ breadcrumb = FALSE
+/\ cancelDone = FALSE
+/\ paymentRecorded = FALSE
+/\ dbFailed = TRUE
+/\ transferId = "none"
+/\ createdBy = 0
+/\ finixState = "none"
+/\ declineCode = "ISSUER_DECLINE"
+/\ refundIssued = FALSE
+/\ amountCents = 10
+/\ orderId = "O1"
+/\ finixAmount = -1
+/\ paymentId = "none"
+/\ approvedAmountCents = -1
+/\ finixCode = "none"
+/\ attempt = 4
+/\ txState = "DECLINED"
+
+State 7: <FinixCreates line 117, col 3 to line 121, col 82 of module FinixPOSFixedEnv>
+/\ breadcrumb = FALSE
+/\ cancelDone = FALSE
+/\ paymentRecorded = FALSE
+/\ dbFailed = TRUE
+/\ transferId = "none"
+/\ createdBy = 0
+/\ finixState = "PENDING"
+/\ declineCode = "ISSUER_DECLINE"
+/\ refundIssued = FALSE
+/\ amountCents = 10
+/\ orderId = "O1"
+/\ finixAmount = -1
+/\ paymentId = "none"
+/\ approvedAmountCents = -1
+/\ finixCode = "none"
+/\ attempt = 4
+/\ txState = "DECLINED"
+
+State 8: <CustomerApprove line 232, col 3 to line 235, col 70 of module FinixPOSFixedEnv>
+/\ breadcrumb = FALSE
+/\ cancelDone = FALSE
+/\ paymentRecorded = FALSE
+/\ dbFailed = TRUE
+/\ transferId = "none"
+/\ createdBy = 0
+/\ finixState = "SUCCEEDED"
+/\ declineCode = "ISSUER_DECLINE"
+/\ refundIssued = FALSE
+/\ amountCents = 10
+/\ orderId = "O1"
+/\ finixAmount = 10
+/\ paymentId = "none"
+/\ approvedAmountCents = -1
+/\ finixCode = "none"
+/\ attempt = 4
+/\ txState = "DECLINED"
+
+128 states generated, 103 distinct states found, 36 states left on queue.
+The depth of the complete state graph search is 8.
+Finished in 00s at (2026-07-04 08:23:47)
+Trace exploration spec path: .\FinixPOSFixedEnv_TTrace_1783178627.tla

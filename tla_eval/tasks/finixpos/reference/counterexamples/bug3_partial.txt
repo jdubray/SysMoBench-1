@@ -1,0 +1,17 @@
+BUG 3 - partial approval declined but charge not voided (I1 violated)
+Config: bug3_partial.cfg (PARTIAL_POSSIBLE=TRUE).
+TLC: Invariant Inv_I1_NoLostCharge violated, 7-state trace (raw: bug3_partial.raw.txt).
+
+ 1-4. normal start: INITIATE -> createSale -> transfer PENDING
+ 5. TRANSFER_CREATED            txState=AWAITING_TAP, transferId=T1
+ 6. customer taps, PARTIAL      Finix SUCCEEDED with amount 5 < requested 10
+ 7. poll sees SUCCEEDED         pollTick :382-399 dispatches TAP_APPROVED(5);
+                                pre-FSM acceptor :864-876 rewrites to
+                                TAP_DECLINED(PARTIAL_PAYMENT) -> txState=DECLINED.
+
+Final: txState=DECLINED(PARTIAL_PAYMENT), finixState=SUCCEEDED(5),
+paymentRecorded=FALSE, breadcrumb=FALSE.
+The POS rejects the partial payment but nothing voids/refunds the SUCCEEDED
+partial transfer at Finix - the money moved and no reversal is issued anywhere
+in the workflow. Assumption to validate: whether Finix card-present sales can
+partially authorize (the guard's existence suggests the authors believed so).

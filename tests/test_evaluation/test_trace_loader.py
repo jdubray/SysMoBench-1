@@ -50,6 +50,22 @@ class TestTraceLoaderEventForm:
         # The Noise record carries no data payload -> plain string action.
         assert windows[2][0] == "Noise"
 
+    def test_pre_post_alias_event_form(self, tmp_path):
+        # finixpos harness emits {pre, action, data, post}.
+        (tmp_path / "t.ndjson").write_text(
+            '{"pre": {"txState": "IDLE"}, "action": "INITIATE_PAYMENT", '
+            '"data": {"orderId": "O1"}, "post": {"txState": "INITIATING"}}\n',
+            encoding="utf-8",
+        )
+        windows = load_trace_windows(
+            "spin", traces_dir=tmp_path, target_actions=["INITIATE_PAYMENT"]
+        )
+        assert len(windows) == 1
+        action, pre, post = windows[0]
+        assert action == {"name": "INITIATE_PAYMENT", "data": {"orderId": "O1"}}
+        assert pre == {"txState": "IDLE"}
+        assert post == {"txState": "INITIATING"}
+
 
 class TestTraceLoaderErrors:
     def test_missing_folder_raises(self, tmp_path):
