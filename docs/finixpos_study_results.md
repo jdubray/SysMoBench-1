@@ -1,5 +1,10 @@
 # finixpos study results — payment state alignment: correctness + JS-SAM vs TLA+
 
+**Published as:** Jean-Jacques Dubray, "Can Code Specify a System Precisely
+Enough to Formally Verify It?", arXiv:2607.05076, July 2026
+(<https://arxiv.org/abs/2607.05076>). This document is the study of record
+behind that paper.
+
 **Status:** COMPLETE (2026-07-04), including the external-review response.
 Both deliverables final: (a) correctness verdict — originally 7 confirmed
 gaps + validated fix patch
