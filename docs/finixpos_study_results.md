@@ -5,6 +5,10 @@ Enough to Formally Verify It?", arXiv:2607.05076, July 2026
 (<https://arxiv.org/abs/2607.05076>). This document is the study of record
 behind that paper.
 
+**Disclosure:** experimental, not peer-reviewed, unproven technology. The
+findings below are a consistency check plus targeted model checking, not a
+proof of correctness; treat them as leads, not guarantees.
+
 **Status:** COMPLETE (2026-07-04), including the external-review response.
 Both deliverables final: (a) correctness verdict — originally 7 confirmed
 gaps + validated fix patch
