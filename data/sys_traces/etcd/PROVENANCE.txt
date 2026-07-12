@@ -1,0 +1,4 @@
+source repo:      https://github.com/etcd-io/raft
+upstream commit:  26647d57a34382bc60457ad508cea835ed9b52da
+harness:          scripts/harness/etcd (tla_spec_trace.go + tla_trace_test.go)
+generated:        2026-07-12T00:06:18Z

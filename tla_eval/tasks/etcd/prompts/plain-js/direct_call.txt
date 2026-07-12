@@ -1,0 +1,90 @@
+Convert the following etcd/raft consensus source code into a plain JavaScript
+transition function — NO libraries, NO frameworks, NO SAM pattern. Just a pure
+function over the observable state. This is compared directly against real
+execution traces of a deterministic 3-node cluster running this exact
+implementation, so it is constrained to the same observable state.
+
+## Source (the real implementation)
+
+Source from {file_path}:
+```go
+{source_code}
+```
+
+## Observable state (EXACTLY this shape)
+
+The state is a plain object describing all three nodes of the cluster:
+
+    {
+      "nodes": {
+        "1": { "role": r, "term": t, "vote": v, "commit": c, "log": l },
+        "2": { ... },
+        "3": { ... }
+      }
+    }
+
+Each per-node entry has EXACTLY these five keys:
+
+  - `role`   — `'follower'`, `'candidate'`, or `'leader'`
+  - `term`   — the node's current term (number)
+  - `vote`   — the node id the node voted for in its current term, as a STRING
+               (`'1'`, `'2'`, `'3'`), or `'0'` if it has not voted
+  - `commit` — the node's commit index (number)
+  - `log`    — the node's last log index (number)
+
+Node ids are the strings `'1'`, `'2'`, `'3'`. Do NOT add any other keys (no
+message queues, no per-entry log terms, no vote-tally sets, no leader id
+field, no network state).
+
+## Module contract (hard requirements)
+
+Your specification is a CommonJS module evaluated by an automated harness. It
+MUST export exactly:
+
+    module.exports = { init, next };
+
+  - `init()` returns the initial state: all three nodes
+    `{ role: 'follower', term: 0, vote: '0', commit: 0, log: 0 }`.
+  - `next(state, action, data)` is a PURE function returning the NEW cluster
+    state after applying ONE action:
+      * `state`  — the current cluster state (shape above).
+      * `action` — one of the strings `'ElectionTimeout'`,
+                   `'HandleVoteRequest'`, `'ClientProposal'`,
+                   `'HandleAppendEntries'`, `'HandleHeartbeat'`.
+      * `data`   — identifies the acting node and, for message-handling
+                   actions, the salient fields of the incoming message:
+          - `ElectionTimeout`:     `{ node }`
+          - `HandleVoteRequest`:   `{ node, from, term, logTerm, index }`
+                                   (a MsgVote from `from` received by `node`;
+                                   `logTerm`/`index` describe the candidate's
+                                   last log entry)
+          - `ClientProposal`:      `{ node }` (a client proposes one entry to
+                                   `node`)
+          - `HandleAppendEntries`: `{ node, from, term, logTerm, index,
+                                      entries, commit }` (a MsgApp from `from`
+                                   received by `node`; `entries` may be 0 for
+                                   a pure commit-index update)
+          - `HandleHeartbeat`:     `{ node, from, term, commit }` (a
+                                   MsgHeartbeat from `from` received by `node`)
+    Every action concerns the single node `data.node`: return the entries of
+    the other two nodes unchanged. Always return a complete cluster state —
+    if the action changes nothing observable, return an equal state. Do NOT
+    mutate `state`; return a new object (deep-copy the entry you change). No
+    I/O, timers, randomness, or external state. No library, no classes
+    required — a single function.
+
+The harness replays real execution traces: it pins a captured pre-state,
+calls `next(pre, action, data)` exactly once, and deep-compares the returned
+cluster state to the captured post-state. Cross-node consequences of a step
+(a candidate winning after a vote response arrives, a leader advancing its
+commit index after append responses) are separate stream steps in the trace,
+NOT part of these five actions' windows — model only what the acting node
+itself does when the action is applied to it. Model the observable
+single-step behavior of the real implementation in the source above (how
+this raft.go actually reacts — term comparisons, vote-granting rules,
+log-match handling, step-down rules), not the textbook Raft paper.
+
+## Output
+
+Output EXACTLY ONE fenced ```javascript code block containing the module, and
+nothing else (no prose).
