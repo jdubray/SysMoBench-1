@@ -146,3 +146,7 @@ tmp*.tmp
 
 # TLC machine-generated trace-replay modules (raw narratives in *.raw.txt / *.txt stay tracked)
 tla_eval/tasks/finixpos/**/*_TTrace_*
+
+# Paper drafts stay out of the repo
+/paper/
+/finixpos_case_study*.tex
