@@ -37,6 +37,7 @@ const results = [];
 for (const w of req.windows) {
   const post = w.postState;
   let status;
+  let got;
   try {
     // Deep-copy the pre-state so a non-pure next() can't corrupt later windows.
     const out = mod.next(structuredClone(w.preState), w.action, w.data);
@@ -44,9 +45,13 @@ for (const w of req.windows) {
     const ok = out !== null && typeof out === 'object'
       && Object.keys(post).every((k) => deepEq(out[k], post[k]));
     status = ok ? 'pass' : 'fail';
+    if (!ok) got = out; // returned state, for repair feedback
   } catch (e) {
     status = 'fail'; // a runtime error on a window is a failed transition
+    got = { error: String(e && e.message ? e.message : e) };
   }
-  results.push({ action: w.action, status });
+  results.push(got === undefined
+    ? { action: w.action, status }
+    : { action: w.action, status, got });
 }
 console.log(JSON.stringify({ ok: true, results }));
