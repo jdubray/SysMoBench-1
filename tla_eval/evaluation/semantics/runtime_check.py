@@ -472,13 +472,22 @@ class TLCRunner:
             if "The following variables are not defined" in line:
                 violations.append(f"Undefined variables: {line}")
             
-            # Extract states explored
+            # Extract states explored. TLC reports both a work counter and the
+            # semantic state-space size on the same line:
+            #   "574 states generated, 159 distinct states found, ..."
+            # states_explored is the DISTINCT count (generated includes duplicate
+            # visits and mislabels work as state-space size); fall back to
+            # generated only when TLC printed no distinct count.
             if "states generated" in line.lower():
                 import re
-                match = re.search(r'(\d+)\s+states generated', line)
+                match = re.search(r'(\d+)\s+distinct states found', line)
                 if match:
                     states_explored = int(match.group(1))
-        
+                else:
+                    match = re.search(r'(\d+)\s+states generated', line)
+                    if match:
+                        states_explored = int(match.group(1))
+
         return violations, deadlock_found, states_explored
 
 

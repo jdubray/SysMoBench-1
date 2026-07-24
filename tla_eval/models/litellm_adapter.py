@@ -284,10 +284,11 @@ class LiteLLMAdapter(ModelAdapter):
     def _should_omit_sampling_params(self) -> bool:
         """Whether to drop temperature/top_p/top_k for this model.
 
-        Claude Opus 4.7+, Fable 5, and Mythos 5 removed the sampling
-        parameters and return a 400 ("`temperature` is deprecated for this
-        model") if any are sent. litellm's drop_params does not yet cover
-        these newer models, so the request must omit them here.
+        Claude Opus 4.7+ and the whole Claude 5 family (Opus 5, Sonnet 5,
+        Fable 5, Mythos 5) removed the sampling parameters and return a 400
+        ("`temperature` is deprecated for this model") if any are sent.
+        litellm's drop_params does not yet cover these newer models, so the
+        request must omit them here.
         """
         model = self.litellm_model.lower()
         return any(
@@ -295,6 +296,8 @@ class LiteLLMAdapter(ModelAdapter):
             for tag in (
                 "claude-opus-4-8",
                 "claude-opus-4-7",
+                "claude-opus-5",
+                "claude-sonnet-5",
                 "claude-fable-5",
                 "claude-mythos-5",
             )

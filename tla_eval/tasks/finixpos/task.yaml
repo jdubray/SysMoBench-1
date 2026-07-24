@@ -1,0 +1,47 @@
+# finixpos task configuration
+name: "finixpos"
+description: "POS <-> PAX A920 terminal <-> Finix backend payment state alignment (baanbaan Merchant/v2)"
+system_type: "distributed"
+language: "typescript"
+
+# Source: local extraction (baanbaan is a private, non-git project).
+# Provenance and scoping: tla_eval/tasks/finixpos/EXTRACTION.md
+repository:
+  url: "local"
+  branch: "n/a"
+
+source_files:
+  - path: "tla_eval/tasks/finixpos/source/source_packet.ts"
+    description: "terminal-payment.ts (complete) + finix.ts terminal excerpts + terminal-outcome.ts"
+
+default_source_file: "tla_eval/tasks/finixpos/source/source_packet.ts"
+
+specModule: "finixpos"
+
+traces_folder: "data/sys_traces/finixpos"
+
+metadata:
+  original_project: "baanbaan Merchant/v2"
+  study_plan: "docs/finixpos_study_plan.md"
+
+tv:
+  repo_path: "C:/Users/jjdub/code/baanbaan/Merchant/v2"
+
+  # Dispatch-level action alphabet (SAM dispatch = one step; CANCEL_DECLINED is
+  # internal/acceptor-synthesized and never appears as a window action).
+  target_actions:
+    - INITIATE_PAYMENT
+    - TRANSFER_CREATED
+    - VERIFICATION_STARTED
+    - TAP_APPROVED
+    - TAP_DECLINED
+    - PAYMENT_RECORDED
+    - CANCEL_PAYMENT
+    - CANCEL_CONFIRMED
+    - EXIT_FLOW
+
+  harness:
+    type: "bun"
+    runner: "tools/finixpos-trace-harness (in the baanbaan repo)"
+    reference_patch: "data/patches/finixpos_trace.patch"
+    patch_note: "Instrumented copy terminal-payment-traced.ts; emulator-driven scenarios; see harness README."

@@ -1,0 +1,19 @@
+BUG 3b - partial-approval guard bypassed via CANCELLING (Inv_NoPartialRecorded violated)
+Config: bug3b_partialrec.cfg (PARTIAL_POSSIBLE=TRUE).
+TLC: Invariant Inv_NoPartialRecorded violated, 9-state trace (raw: bug3b_partialrec.raw.txt).
+
+ 1-5. normal start to AWAITING_TAP (transferId=T1)
+ 6. customer taps PARTIAL       SUCCEEDED, amount 5 < 10
+ 7. staff cancels               AWAITING_TAP -> CANCELLING (or the 180 s timeout fires)
+ 8. poll sees SUCCEEDED         TAP_APPROVED(5) dispatched while CANCELLING; the
+                                partial-payment acceptor guard checks
+                                model.txState === 'AWAITING_TAP' ONLY (:866), so the
+                                rewrite does NOT apply; FSM CANCELLING+TAP_APPROVED
+                                -> RECORDING (:241), approvedAmountCents=5.
+ 9. record NAP                  recordTerminalPayment books 5 as the payment and
+                                marks the order paid (:1991-2107) - a 10-unit order
+                                is marked paid on a 5-unit charge.
+
+Same bypass exists via AWAITING_VERIFICATION (sweep resolveVerification
+:1393-1401 dispatches TAP_APPROVED with the sweep-reported amount; the guard
+again only covers AWAITING_TAP).

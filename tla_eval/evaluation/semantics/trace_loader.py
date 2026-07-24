@@ -117,6 +117,11 @@ def load_trace_windows(
                 if not isinstance(record, dict):
                     continue
 
+                # Event-form alias: {pre, action, data, post} (finixpos harness).
+                if "pre" in record and "post" in record and "pre_state" not in record:
+                    record["pre_state"] = record["pre"]
+                    record["post_state"] = record["post"]
+
                 action_name = record.get("action")
 
                 if "pre_state" in record and "post_state" in record:

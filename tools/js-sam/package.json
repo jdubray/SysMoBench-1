@@ -8,9 +8,9 @@
     "node": ">=20"
   },
   "dependencies": {
-    "@cognitive-fab/sam-pattern": "^1.6.1",
-    "@cognitive-fab/sam-fsm": "^1.0.0",
-    "sam-pattern": "npm:@cognitive-fab/sam-pattern@^1.6.1",
-    "sam-fsm": "npm:@cognitive-fab/sam-fsm@^1.0.0"
+    "@cognitive-fab/sam-fsm": "^2.0.0",
+    "@cognitive-fab/sam-pattern": "^2.1.2",
+    "sam-fsm": "npm:@cognitive-fab/sam-fsm@^1.0.0",
+    "sam-pattern": "npm:@cognitive-fab/sam-pattern@^1.6.1"
   }
 }

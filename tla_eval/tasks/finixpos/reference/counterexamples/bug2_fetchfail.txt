@@ -1,0 +1,23 @@
+BUG 2 - 422-path fetch failure declines with no breadcrumb (I1 violated)
+Config: bug2_fetchfail.cfg (FETCH_CAN_FAIL=TRUE).
+TLC: Invariant Inv_I1_NoLostCharge violated, 7-state trace (raw: bug2_fetchfail.raw.txt).
+
+ 1. IDLE
+ 2. INITIATE_PAYMENT
+ 3. createSale NAP fires        attempt 1 in flight
+ 4. Finix creates transfer      state=PENDING (attempt 1's request accepted)
+ 5. attempt-1 response LOST     network error; retry with SAME key (:513-521), attempt 2
+ 6. attempt 2 gets 422          duplicate idempotency key (FinixTransferCancelledError);
+                                handleDuplicateKey422 tries to fetch the existing
+                                transfer and the FETCH FAILS (:660-673) -> declines
+                                conservatively (TAP_DECLINED, CANCELLATION_VIA_API).
+                                NO pending_terminal_sales row is written on this path
+                                (only Case 4 of runCreateSale writes one, :604-611).
+ 7. customer taps               the transfer was still PENDING on the device ->
+                                SUCCEEDED at Finix.
+
+Final: txState=DECLINED, finixState=SUCCEEDED, paymentRecorded=FALSE, breadcrumb=FALSE.
+The code's own comment (:661-663) acknowledges "the original transfer may be SUCCEEDED
+and unknown to us" - but leaves no idempotency-key breadcrumb for the sweep, so the
+charge is permanently invisible to the POS. Fix shape: write pending_terminal_sales
+before declining in the :660 catch (the key is in scope).

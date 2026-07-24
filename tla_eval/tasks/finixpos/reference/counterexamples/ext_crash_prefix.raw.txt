@@ -1,0 +1,143 @@
+TLC2 Version 2026.05.26.235334 (rev: 4ba7d88)
+Warning: Please run the Java VM, which executes TLC with a throughput optimized garbage collector, by passing the "-XX:+UseParallelGC" property.
+(Use the -nowarning option to disable this warning.)
+Running breadth-first search Model-Checking with fp 22 and seed -3580748650511213985 with 1 worker on 22 cores with 16216MB heap and 64MB offheap memory [pid: 14372] (Windows 11 10.0 amd64, Azul Systems, Inc. 21.0.5 64bit, MSBDiskFPSet, DiskStateQueue).
+Parsing file C:\Users\jjdub\code\sysmobench\tla_eval\tasks\finixpos\reference\FinixPOSCrash.tla
+Parsing file C:\Users\jjdub\code\sysmobench\tla_eval\tasks\finixpos\reference\FinixPOS.tla
+Parsing file C:\Users\jjdub\AppData\Local\Temp\tlc-12111886543161924488\_TLCTrace.tla (jar:file:/C:/Users/jjdub/code/sysmobench/lib/tla2tools.jar!/tla2sany/StandardModules/_TLCTrace.tla)
+Parsing file C:\Users\jjdub\AppData\Local\Temp\tlc-12111886543161924488\Integers.tla (jar:file:/C:/Users/jjdub/code/sysmobench/lib/tla2tools.jar!/tla2sany/StandardModules/Integers.tla)
+Parsing file C:\Users\jjdub\AppData\Local\Temp\tlc-12111886543161924488\Naturals.tla (jar:file:/C:/Users/jjdub/code/sysmobench/lib/tla2tools.jar!/tla2sany/StandardModules/Naturals.tla)
+Parsing file C:\Users\jjdub\AppData\Local\Temp\tlc-12111886543161924488\TLC.tla (jar:file:/C:/Users/jjdub/code/sysmobench/lib/tla2tools.jar!/tla2sany/StandardModules/TLC.tla)
+Parsing file C:\Users\jjdub\AppData\Local\Temp\tlc-12111886543161924488\TLCExt.tla (jar:file:/C:/Users/jjdub/code/sysmobench/lib/tla2tools.jar!/tla2sany/StandardModules/TLCExt.tla)
+Parsing file C:\Users\jjdub\AppData\Local\Temp\tlc-12111886543161924488\Sequences.tla (jar:file:/C:/Users/jjdub/code/sysmobench/lib/tla2tools.jar!/tla2sany/StandardModules/Sequences.tla)
+Parsing file C:\Users\jjdub\AppData\Local\Temp\tlc-12111886543161924488\FiniteSets.tla (jar:file:/C:/Users/jjdub/code/sysmobench/lib/tla2tools.jar!/tla2sany/StandardModules/FiniteSets.tla)
+Semantic processing of module Naturals
+Semantic processing of module Integers
+Semantic processing of module FinixPOS
+Semantic processing of module Sequences
+Semantic processing of module FiniteSets
+Semantic processing of module TLC
+Semantic processing of module TLCExt
+Semantic processing of module _TLCTrace
+Semantic processing of module FinixPOSCrash
+Linting of module FinixPOS
+Linting of module TLCExt
+Linting of module _TLCTrace
+Linting of module FinixPOSCrash
+Starting... (2026-07-04 08:31:00)
+Computing initial states...
+Finished computing initial states: 1 distinct state generated at 2026-07-04 08:31:00.
+Error: Invariant Inv_I1_NoLostCharge is violated.
+Error: The behavior up to this point is:
+State 1: <Initial predicate>
+/\ breadcrumb = FALSE
+/\ reqSent = FALSE
+/\ cancelDone = FALSE
+/\ paymentRecorded = FALSE
+/\ transferId = "none"
+/\ finixState = "none"
+/\ declineCode = "none"
+/\ amountCents = -1
+/\ orderId = "none"
+/\ rowTid = "none"
+/\ crashed = 0
+/\ rowTx = "none"
+/\ paymentId = "none"
+/\ approvedAmountCents = -1
+/\ attempt = 0
+/\ txState = "IDLE"
+
+State 2: <Initiate line 88, col 3 to line 90, col 22 of module FinixPOSCrash>
+/\ breadcrumb = FALSE
+/\ reqSent = FALSE
+/\ cancelDone = FALSE
+/\ paymentRecorded = FALSE
+/\ transferId = "none"
+/\ finixState = "none"
+/\ declineCode = "none"
+/\ amountCents = 10
+/\ orderId = "O1"
+/\ rowTid = "none"
+/\ crashed = 0
+/\ rowTx = "none"
+/\ paymentId = "none"
+/\ approvedAmountCents = -1
+/\ attempt = 0
+/\ txState = "INITIATING"
+
+State 3: <NapCreateStart line 93, col 3 to line 96, col 58 of module FinixPOSCrash>
+/\ breadcrumb = FALSE
+/\ reqSent = TRUE
+/\ cancelDone = FALSE
+/\ paymentRecorded = FALSE
+/\ transferId = "none"
+/\ finixState = "none"
+/\ declineCode = "none"
+/\ amountCents = 10
+/\ orderId = "O1"
+/\ rowTid = "none"
+/\ crashed = 0
+/\ rowTx = "none"
+/\ paymentId = "none"
+/\ approvedAmountCents = -1
+/\ attempt = 1
+/\ txState = "INITIATING"
+
+State 4: <FinixCreates line 101, col 3 to line 104, col 58 of module FinixPOSCrash>
+/\ breadcrumb = FALSE
+/\ reqSent = TRUE
+/\ cancelDone = FALSE
+/\ paymentRecorded = FALSE
+/\ transferId = "none"
+/\ finixState = "PENDING"
+/\ declineCode = "none"
+/\ amountCents = 10
+/\ orderId = "O1"
+/\ rowTid = "none"
+/\ crashed = 0
+/\ rowTx = "none"
+/\ paymentId = "none"
+/\ approvedAmountCents = -1
+/\ attempt = 1
+/\ txState = "INITIATING"
+
+State 5: <CustomerApprove line 141, col 3 to line 144, col 58 of module FinixPOSCrash>
+/\ breadcrumb = FALSE
+/\ reqSent = TRUE
+/\ cancelDone = FALSE
+/\ paymentRecorded = FALSE
+/\ transferId = "none"
+/\ finixState = "SUCCEEDED"
+/\ declineCode = "none"
+/\ amountCents = 10
+/\ orderId = "O1"
+/\ rowTid = "none"
+/\ crashed = 0
+/\ rowTx = "none"
+/\ paymentId = "none"
+/\ approvedAmountCents = -1
+/\ attempt = 1
+/\ txState = "INITIATING"
+
+State 6: <CrashRestart line 200, col 3 to line 227, col 34 of module FinixPOSCrash>
+/\ breadcrumb = FALSE
+/\ reqSent = TRUE
+/\ cancelDone = TRUE
+/\ paymentRecorded = FALSE
+/\ transferId = "none"
+/\ finixState = "SUCCEEDED"
+/\ declineCode = "none"
+/\ amountCents = 10
+/\ orderId = "O1"
+/\ rowTid = "none"
+/\ crashed = 1
+/\ rowTx = "INITIATING"
+/\ paymentId = "none"
+/\ approvedAmountCents = -1
+/\ attempt = 4
+/\ txState = "ZOMBIE"
+
+26 states generated, 24 distinct states found, 11 states left on queue.
+The depth of the complete state graph search is 6.
+Finished in 00s at (2026-07-04 08:31:00)
+Trace exploration spec path: .\FinixPOSCrash_TTrace_1783179060.tla

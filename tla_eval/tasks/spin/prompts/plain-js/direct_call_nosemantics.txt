@@ -1,0 +1,48 @@
+Convert the following Asterinas OS spinlock source code into a plain JavaScript
+transition function — NO libraries, NO frameworks, NO SAM pattern. Just a pure
+function over the observable state. This is compared directly against a TLA+
+relation of the same lock, so it is constrained to the same two-variable
+observable state.
+
+## Source (the real implementation)
+
+Source from {file_path}:
+```rust
+{source_code}
+```
+
+## Observable state (EXACTLY two keys)
+
+The state is a plain object with EXACTLY these two keys:
+
+  - `lockHeld`   — boolean: true iff the lock is currently held
+  - `lockHolder` — the holding thread id (0 or 1), or null if free
+
+Do NOT add any other keys (no threadStatus, no callType map, no counters).
+
+## Module contract (hard requirements)
+
+Your specification is a CommonJS module evaluated by an automated harness. It
+MUST export exactly:
+
+    module.exports = { init, next };
+
+  - `init()` returns the initial state: `{ lockHeld: false, lockHolder: null }`.
+  - `next(state, action, data)` is a PURE function returning the NEW state
+    `{ lockHeld, lockHolder }` after applying ONE action:
+      * `state`  — the current `{ lockHeld, lockHolder }`.
+      * `action` — the string `'AcquireLock'` or `'ReleaseLock'`.
+      * `data`   — `{ thread: 0|1, callType: 'lock'|'try' }` for AcquireLock;
+                   `{ thread: 0|1 }` for ReleaseLock.
+    Do NOT mutate `state`; return a new object. No I/O, timers, randomness, or
+    external state. No SAM library, no classes required — a single function.
+
+The harness replays real kernel execution traces: it pins a captured pre-state,
+calls `next(pre, action, data)` exactly once, and compares the returned
+`{ lockHeld, lockHolder }` to the captured post-state. Model the observable
+single-step behavior of the real lock as implemented in the source above.
+
+## Output
+
+Output EXACTLY ONE fenced ```javascript code block containing the module, and
+nothing else (no prose).

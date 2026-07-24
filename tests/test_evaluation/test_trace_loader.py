@@ -50,6 +50,22 @@ class TestTraceLoaderEventForm:
         # The Noise record carries no data payload -> plain string action.
         assert windows[2][0] == "Noise"
 
+    def test_pre_post_alias_event_form(self, tmp_path):
+        # finixpos harness emits {pre, action, data, post}.
+        (tmp_path / "t.ndjson").write_text(
+            '{"pre": {"txState": "IDLE"}, "action": "INITIATE_PAYMENT", '
+            '"data": {"orderId": "O1"}, "post": {"txState": "INITIATING"}}\n',
+            encoding="utf-8",
+        )
+        windows = load_trace_windows(
+            "spin", traces_dir=tmp_path, target_actions=["INITIATE_PAYMENT"]
+        )
+        assert len(windows) == 1
+        action, pre, post = windows[0]
+        assert action == {"name": "INITIATE_PAYMENT", "data": {"orderId": "O1"}}
+        assert pre == {"txState": "IDLE"}
+        assert post == {"txState": "INITIATING"}
+
 
 class TestTraceLoaderErrors:
     def test_missing_folder_raises(self, tmp_path):
@@ -117,13 +133,24 @@ class TestDirectPathEvaluator:
             TransitionValidationEvaluator,
         )
 
+        import tla_eval.evaluation.semantics.trace_loader as loader_mod
+
         spec = PROJECT_ROOT / "tests" / "fixtures" / "js_sam" / "specs" / "spin-good.js"
         evaluator = TransitionValidationEvaluator(
             language="JS-SAM", workspace_root=str(tmp_path)
         )
-        # No monkeypatch: the real spin traces_folder (data/sys_traces/spin)
-        # is not checked into the repository, so the loader must fail with an
-        # actionable message rather than a crash.
+        # Simulate an absent trace corpus. (This used to rely on the real spin
+        # traces_folder being untracked, but data/sys_traces/spin has since been
+        # committed, so the loader must be stubbed to exercise the error path.)
+        missing = tmp_path / "no_such_traces"
+
+        def _raise(task_name):
+            raise FileNotFoundError(
+                f"Trace folder for task '{task_name}' not found: {missing}. "
+                "Captured traces are produced by the task's instrumentation harness."
+            )
+
+        monkeypatch.setattr(loader_mod, "load_trace_windows", _raise)
         result = evaluator.evaluate(
             generation_result=SimpleNamespace(metadata={}),
             task_name="spin",

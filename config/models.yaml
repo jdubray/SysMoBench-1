@@ -64,6 +64,39 @@ models:
     max_tokens: 64000
     timeout: 1800
 
+  # Claude Opus 5 — released 2026-07. Like Fable 5 / Opus 4.7+, the sampling
+  # params (temperature/top_p/top_k) are rejected, so none are set here and the
+  # adapter's _should_omit_sampling_params drops any that leak in from defaults.
+  # 128K max output; kept at 64000 to match the house default and stay inside
+  # the non-streaming timeout. Reasons heavily, so allow a long timeout.
+  opus5:
+    provider: "anthropic"
+    model_name: "claude-opus-5"
+    api_key_env: "ANTHROPIC_API_KEY"
+    max_tokens: 64000
+    timeout: 1800
+
+  mistral-large:
+    provider: "mistral"
+    model_name: "mistral-large-2512"
+    api_key_env: "MISTRAL_API_KEY"
+    max_tokens: 64000
+    timeout: 1800
+
+  devstral:
+    provider: "mistral"
+    model_name: "devstral-2512"
+    api_key_env: "MISTRAL_API_KEY"
+    max_tokens: 64000
+    timeout: 1800
+
+  leanstral:
+    provider: "mistral"
+    model_name: "labs-leanstral-1-5-1"  # announced as "Leanstral 1.5"; API id probed 2026-07-05
+    api_key_env: "MISTRAL_API_KEY"
+    max_tokens: 64000
+    timeout: 1800  # prover-style model; may reason long before emitting the spec
+
   deepseek_tencent:
     provider: "deepseek"
     url: "https://api.lkeap.cloud.tencent.com/v1"

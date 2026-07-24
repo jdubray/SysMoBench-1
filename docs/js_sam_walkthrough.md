@@ -167,10 +167,13 @@ spinlock solution, complete enough to teach the whole module contract.
 
 ### Direct helper smoke tests (run during development)
 
-- **Phase 2 on the good model:** explored **326,592 states in ~2.7 s** at the
+- **Phase 2 on the good model:** ran **326,592 checker steps in ~2.7 s** at the
   bench depth bound of 6, twice (the second pass is a determinism check),
   with zero violations. Demonstrates the bundled explorer is fast enough that
-  depth 6 costs seconds, not minutes.
+  depth 6 costs seconds, not minutes. (The step count is combinatorial —
+  `(d+1)·6^d` over the pinned intent domain, identical for any conforming spec;
+  the semantic measure is the *distinct states* count the checker now also
+  reports. See the Phase-2 metric audit in `docs/js_sam_vs_tla_comparison.md`.)
 - **Phase 3 with a deliberately wrong expectation:** fed a window claiming a
   failed `try_lock` leaves the thread `'trying'`. The replay failed exactly
   that window with the pinpoint diff

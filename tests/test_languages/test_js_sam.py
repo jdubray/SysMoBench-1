@@ -110,6 +110,26 @@ class TestPhase2ModelCheck:
         assert outcome.classification == "runtime_error"
         assert "release by non-holder" in outcome.error_message
 
+    def test_distinct_states_are_semantic_not_combinatorial(self, backend, tmp_path):
+        """Regression for the Phase-2 metric audit: the checker's step count is
+        combinatorial — the same intent-permutation tree for ANY spec honoring the
+        intent-domain contract — so it is model-independent and says nothing about
+        the spec. states_explored must instead report distinct semantic states,
+        which differ between a correct spec and one whose release is a no-op."""
+        good = backend.run_model_checker(SPECS / "spin-good.js", None, tmp_path / "g", timeout=300)
+        broken = backend.run_model_checker(SPECS / "spin-neverrelease.js", None, tmp_path / "b", timeout=300)
+        assert good.success, good.error_message
+        assert broken.success, broken.error_message  # never-releasing is wrong, not crashing
+        g = json.loads(good.raw_output)
+        b = json.loads(broken.raw_output)
+        # Identical work done: same intent domain, same depth => same step count...
+        assert g["stepsExplored"] == b["stepsExplored"]
+        # ...but the semantic state spaces differ, and that is what the outcome reports.
+        assert good.states_explored != broken.states_explored
+        assert 0 < good.states_explored < g["stepsExplored"]
+        # The never-release spec strands the lock: strictly fewer reachable states.
+        assert broken.states_explored < good.states_explored
+
 
 @node_required
 class TestPhase3Transitions:
@@ -209,6 +229,37 @@ class TestPhase4Invariants:
         assert len(outcome.cases) == 1
         assert not outcome.cases[0].success
         assert "No translated invariant" in outcome.cases[0].error_message
+
+    def test_safety_only_phase4_passes_a_never_releasing_lock(self, backend, tmp_path):
+        """CHARACTERIZATION of a documented weakness, not desired behavior: the
+        shipped Phase-4 invariant set is safety-only, and a never-releasing lock
+        satisfies every one of them BECAUSE it is broken (mutual exclusion holds
+        trivially when the lock never changes hands). Phase 4 as implemented
+        cannot fail this defect class in principle; the discriminating
+        properties are liveness, which the bounded checker does not verify.
+        If this test ever fails, Phase 4 gained a real capability — update
+        docs/js_sam_vs_tla_comparison.md accordingly."""
+        import yaml
+        tpl_file = PROJECT_ROOT / "data" / "js_sam_invariant_templates" / "spin" / "invariants.yaml"
+        tpl = yaml.safe_load(tpl_file.read_text(encoding="utf-8"))
+        templates = [
+            InvariantTemplate(
+                name=i["name"], type=i["type"],
+                natural_language=i["natural_language"],
+                formal_description=i["formal_description"],
+                example=i["javascript_example"],
+            )
+            for i in tpl["invariants"]
+        ]
+        translated = {i["name"]: i["javascript_example"].strip() for i in tpl["invariants"]}
+        outcome = backend.check_invariants(
+            SPECS / "spin-neverrelease.js", None, templates, translated, tmp_path, timeout=300
+        )
+        assert all(c.success for c in outcome.cases), (
+            "Phase 4 unexpectedly FAILED the never-releasing lock — the "
+            "safety-only weakness may have been fixed; update the docs."
+        )
+        assert len(outcome.cases) == 3
 
 
 class TestTranslationParsing:

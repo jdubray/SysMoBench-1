@@ -1,0 +1,75 @@
+Generate a TLA+ specification of an Asterinas OS spinlock, for automated
+validation against real kernel execution traces. This spec is compared directly
+against a JavaScript (SAM) spec of the same lock, so it is constrained to the
+same observable-state contract: express the lock over the identical variables
+the trace uses, so trace states map onto spec states with no interpretation.
+
+## Source (the real implementation)
+
+{source_code}
+
+## Observable-state contract (MANDATORY — the harness pins these exactly)
+
+Your module MUST be named `spin` and its observable state MUST be EXACTLY these
+two variables — declare no others:
+
+    VARIABLES lockHeld, lockHolder
+
+  - lockHeld  ∈ BOOLEAN              — TRUE iff the lock is currently held
+  - lockHolder ∈ Threads ∪ {NONE}   — the holding thread id, or NONE if free
+
+Declare `Threads` as a CONSTANT (the finite set of thread ids; the harness binds
+it to {0, 1}). Define the "no holder" sentinel as a plain string:
+
+    NONE == "none"
+
+  DO NOT define NONE (or any value) with CHOOSE — e.g. `CHOOSE v : v \notin
+  Threads` is an UNBOUNDED CHOOSE that TLC cannot evaluate, and the spec will
+  fail model checking. Use the string sentinel above.
+
+Do NOT introduce any other VARIABLES (no pc, threadState, requestType, etc.).
+Model the lock purely over lockHeld and lockHolder.
+
+## Action operators (MANDATORY signatures — top-level named operators)
+
+    AcquireLock(thread, callType) == ...   \* thread ∈ Threads, callType ∈ {"lock", "try"}
+    ReleaseLock(thread) == ...             \* thread ∈ Threads
+
+Each is a TLA+ action relating unprimed lockHeld/lockHolder to their primed
+values. These names and arities are the contract with the trace harness — do not
+rename, merge, or split them.
+
+## Observable single-step semantics (what a correct model must reproduce)
+
+For each observed trace transition the harness pins the pre-state
+(lockHeld, lockHolder), applies ONE action with the trace's data, and checks the
+resulting (lockHeld, lockHolder) equals the trace post-state. Define the actions
+to match the real lock's observable behavior in a single step:
+
+  - AcquireLock(t, ct):
+      * lock free (~lockHeld): t acquires it — lockHeld' = TRUE, lockHolder' = t.
+      * lock held: the attempt does NOT change ownership — lockHeld and lockHolder
+        unchanged. This holds for BOTH callType "lock" and "try": a blocking
+        lock() spins without changing the observable lock; a try that fails leaves
+        it unchanged.
+  - ReleaseLock(t):
+      * t holds the lock (lockHolder = t): release — lockHeld' = FALSE, lockHolder' = NONE.
+      * otherwise: no observable change (lockHeld, lockHolder unchanged).
+
+## Required structure
+
+  - EXTENDS Naturals (add only standard modules you actually use).
+  - Init == lockHeld = FALSE /\ lockHolder = NONE
+  - TypeOK == lockHeld \in BOOLEAN /\ lockHolder \in (Threads \union {NONE})
+  - Next == \E t \in Threads :
+              \/ \E ct \in {"lock", "try"} : AcquireLock(t, ct)
+              \/ ReleaseLock(t)
+  - Spec == Init /\ [][Next]_<<lockHeld, lockHolder>>
+
+## Output
+
+Output EXACTLY TWO fenced code blocks and NOTHING else (no prose):
+
+1. a ```tla block: the full module, from `---- MODULE spin ----` to `====`.
+2. a ```cfg block: `SPECIFICATION Spec` and a `CONSTANTS` section binding
+   `Threads = {0, 1}`. Do NOT add INVARIANT or PROPERTY lines.

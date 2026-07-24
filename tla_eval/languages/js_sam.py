@@ -458,7 +458,11 @@ class JsSamBackend(LanguageBackend):
             elapsed_seconds=elapsed,
             error_message="; ".join(errors) if errors else None,
             classification=response.get("classification"),
-            states_explored=response.get("stepsExplored"),
+            # Distinct semantic states reached — NOT the checker's step count.
+            # stepsExplored is combinatorial (intent domain ^ depth): identical
+            # for any spec honoring the intent contract, so it is meaningless as
+            # a property of the spec. It stays available in raw_output.
+            states_explored=response.get("distinctStates"),
         )
 
     # ---- Phase 3 (direct path) ------------------------------------------
@@ -668,8 +672,11 @@ class JsSamBackend(LanguageBackend):
             metadata: Dict[str, Any] = {}
             if r.get("counterexample"):
                 metadata["counterexample"] = r["counterexample"]
+            # Semantic state count; the combinatorial step count keeps its own key.
+            if r.get("distinctStates") is not None:
+                metadata["states_explored"] = r["distinctStates"]
             if r.get("stepsExplored") is not None:
-                metadata["states_explored"] = r["stepsExplored"]
+                metadata["steps_explored"] = r["stepsExplored"]
 
             outcome.cases.append(
                 InvariantCaseResult(

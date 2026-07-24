@@ -1,0 +1,20 @@
+BUG 5 (found during modeling, not in EXTRACTION sec.8) - double network failure
+during cancel loses a real charge (I3, I1 violated)
+Config: bug5_blindcancel.cfg (CANCEL_BLIND_POSSIBLE=TRUE).
+TLC: Invariant Inv_I3_CancelHonoured violated, 8-state trace (raw: bug5_blindcancel.raw.txt).
+
+ 1-5. normal start to AWAITING_TAP
+ 6. customer taps               SUCCEEDED (full amount)
+ 7. staff cancels               AWAITING_TAP -> CANCELLING
+ 8. cancel NAP, blind           cancelTerminalSale THROWS (:1061-1066) and the
+                                verification probe getTerminalTransferStatus ALSO
+                                fails (:1036-1038 catch) -> _cancelConfirmed
+                                "conservative" -> CANCELLED.
+
+Final: txState=CANCELLED, finixState=SUCCEEDED, paymentRecorded=FALSE.
+Mitigations that exist in the code but are racy: the poll loop also runs in
+CANCELLING and would dispatch TAP_APPROVED if a tick lands between the tap and
+the cancel-confirm - but the cancel ladder can win the race. Unlike bug 1 the
+ttx row HAS the transferId (dehydrated at :961-963), so a sweep over CANCELLED
+rows with a transfer id could recover this - no such sweep exists today
+(recoverOrphanedCompletedPayments only scans tx_state='COMPLETED', :1738).

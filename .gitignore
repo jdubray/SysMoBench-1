@@ -118,3 +118,35 @@ docs/leaderboard/**/states/
 
 # Node (JS-SAM helper)
 node_modules/
+
+# Paper: track source (.tex/.md/.pdf), ignore LaTeX build byproducts
+paper/*.aux
+paper/*.log
+paper/*.out
+paper/*.toc
+paper/*.bbl
+paper/*.blg
+paper/*.synctex.gz
+
+# finixpos article — published independently on arXiv; iterations not tracked here
+finixpos_case_study*
+paper/finixpos_case_study.*
+paper/finixpos_review_response.md
+paper/review_finixpos_case_study.md
+paper/review_js_sam_sysmobench.md
+paper/literature_map.md
+paper/payment_sm_literature.md
+why_be_careful_llm_research_assistant.md
+
+# Local scratch
+files.zip
+tmp*.tmp
+.memsearch/
+.puffin/
+
+# TLC machine-generated trace-replay modules (raw narratives in *.raw.txt / *.txt stay tracked)
+tla_eval/tasks/finixpos/**/*_TTrace_*
+
+# Paper drafts stay out of the repo
+/paper/
+/finixpos_case_study*.tex
