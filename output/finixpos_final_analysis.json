@@ -1,0 +1,344 @@
+{
+ "table": {
+  "claude|sam": {
+   "uncond": 98.8118811881188,
+   "cond": 98.8118811881188,
+   "per_gen_pass": [
+    101,
+    101,
+    95,
+    101,
+    101
+   ]
+  },
+  "claude|lean": {
+   "uncond": 100.0,
+   "cond": 100.0,
+   "per_gen_pass": [
+    101,
+    101,
+    101,
+    101,
+    101
+   ]
+  },
+  "claude|tla": {
+   "uncond": 98.8118811881188,
+   "cond": 99.6039603960396,
+   "per_gen_pass": [
+    101,
+    101,
+    97,
+    101,
+    99
+   ]
+  },
+  "fable|sam": {
+   "uncond": 100.0,
+   "cond": 100.0,
+   "per_gen_pass": [
+    101,
+    101,
+    101,
+    101,
+    101
+   ]
+  },
+  "fable|lean": {
+   "uncond": 100.0,
+   "cond": 100.0,
+   "per_gen_pass": [
+    101,
+    101,
+    101,
+    101,
+    101
+   ]
+  },
+  "fable|tla": {
+   "uncond": 100.0,
+   "cond": 100.0,
+   "per_gen_pass": [
+    101,
+    101,
+    101,
+    101,
+    101
+   ]
+  },
+  "sonnet|sam": {
+   "uncond": 98.8118811881188,
+   "cond": 98.8118811881188,
+   "per_gen_pass": [
+    98,
+    98,
+    101,
+    101,
+    101
+   ]
+  },
+  "sonnet|lean": {
+   "uncond": 99.4059405940594,
+   "cond": 99.4059405940594,
+   "per_gen_pass": [
+    98,
+    101,
+    101,
+    101,
+    101
+   ]
+  },
+  "sonnet|tla": {
+   "uncond": 88.31683168316832,
+   "cond": 98.26086956521739,
+   "per_gen_pass": [
+    88,
+    89,
+    92,
+    87,
+    90
+   ]
+  },
+  "haiku|sam": {
+   "uncond": 0.0,
+   "cond": 0.0,
+   "per_gen_pass": [
+    0,
+    0,
+    0,
+    0,
+    0
+   ]
+  },
+  "haiku|lean": {
+   "uncond": 95.84158415841583,
+   "cond": 95.84158415841583,
+   "per_gen_pass": [
+    98,
+    95,
+    92,
+    98,
+    101
+   ]
+  },
+  "haiku|tla": {
+   "uncond": 79.6039603960396,
+   "cond": 97.10843373493977,
+   "per_gen_pass": [
+    80,
+    80,
+    80,
+    82,
+    80
+   ]
+  },
+  "leanstral|sam": {
+   "uncond": 64.55445544554456,
+   "cond": 64.55445544554456,
+   "per_gen_pass": [
+    90,
+    95,
+    26,
+    26,
+    89
+   ]
+  },
+  "leanstral|lean": {
+   "uncond": 87.72277227722772,
+   "cond": 87.72277227722772,
+   "per_gen_pass": [
+    98,
+    98,
+    57,
+    89,
+    101
+   ]
+  },
+  "leanstral|tla": {
+   "uncond": 47.52475247524753,
+   "cond": 57.83068783068783,
+   "per_gen_pass": [
+    0,
+    81,
+    0,
+    78,
+    81
+   ]
+  },
+  "mistral-large|sam": {
+   "uncond": 79.6039603960396,
+   "cond": 79.6039603960396,
+   "per_gen_pass": [
+    101,
+    101,
+    99,
+    0,
+    101
+   ]
+  },
+  "mistral-large|lean": {
+   "uncond": 97.02970297029702,
+   "cond": 97.02970297029702,
+   "per_gen_pass": [
+    98,
+    98,
+    98,
+    98,
+    98
+   ]
+  },
+  "mistral-large|tla": {
+   "uncond": 34.45544554455446,
+   "cond": 59.1044776119403,
+   "per_gen_pass": [
+    55,
+    55,
+    0,
+    0,
+    64
+   ]
+  },
+  "devstral|sam": {
+   "uncond": 58.21782178217821,
+   "cond": 58.21782178217821,
+   "per_gen_pass": [
+    0,
+    101,
+    0,
+    92,
+    101
+   ]
+  },
+  "devstral|lean": {
+   "uncond": 92.67326732673268,
+   "cond": 92.67326732673268,
+   "per_gen_pass": [
+    94,
+    93,
+    93,
+    94,
+    94
+   ]
+  },
+  "devstral|tla": {
+   "uncond": 65.74257425742573,
+   "cond": 96.58303464755076,
+   "per_gen_pass": [
+    59,
+    58,
+    59,
+    78,
+    78
+   ]
+  }
+ },
+ "permutation_tests": {
+  "claude|lean-tla": {
+   "delta": 0.011881188118811892,
+   "p": 0.4444444444444444
+  },
+  "claude|sam-tla": {
+   "delta": 0.0,
+   "p": 1.0
+  },
+  "claude|lean-sam": {
+   "delta": 0.011881188118811892,
+   "p": 1.0
+  },
+  "fable|lean-tla": {
+   "delta": 0.0,
+   "p": 1.0
+  },
+  "fable|sam-tla": {
+   "delta": 0.0,
+   "p": 1.0
+  },
+  "fable|lean-sam": {
+   "delta": 0.0,
+   "p": 1.0
+  },
+  "sonnet|lean-tla": {
+   "delta": 0.11089108910891077,
+   "p": 0.007936507936507936
+  },
+  "sonnet|sam-tla": {
+   "delta": 0.10495049504950482,
+   "p": 0.007936507936507936
+  },
+  "sonnet|lean-sam": {
+   "delta": 0.005940594059405946,
+   "p": 1.0
+  },
+  "haiku|lean-tla": {
+   "delta": 0.1623762376237623,
+   "p": 0.007936507936507936
+  },
+  "haiku|sam-tla": {
+   "delta": -0.7960396039603961,
+   "p": 0.007936507936507936
+  },
+  "haiku|lean-sam": {
+   "delta": 0.9584158415841584,
+   "p": 0.007936507936507936
+  },
+  "leanstral|lean-tla": {
+   "delta": 0.4019801980198018,
+   "p": 0.12698412698412698
+  },
+  "leanstral|sam-tla": {
+   "delta": 0.17029702970297023,
+   "p": 0.5317460317460317
+  },
+  "leanstral|lean-sam": {
+   "delta": 0.23168316831683156,
+   "p": 0.1984126984126984
+  },
+  "mistral-large|lean-tla": {
+   "delta": 0.6257425742574256,
+   "p": 0.007936507936507936
+  },
+  "mistral-large|sam-tla": {
+   "delta": 0.4514851485148515,
+   "p": 0.14285714285714285
+  },
+  "mistral-large|lean-sam": {
+   "delta": 0.1742574257425742,
+   "p": 1.0
+  },
+  "devstral|lean-tla": {
+   "delta": 0.26930693069306955,
+   "p": 0.007936507936507936
+  },
+  "devstral|sam-tla": {
+   "delta": -0.0752475247524752,
+   "p": 0.6666666666666666
+  },
+  "devstral|lean-sam": {
+   "delta": 0.34455445544554475,
+   "p": 0.40476190476190477
+  }
+ },
+ "uniqueness": {
+  "claude|sam": 2,
+  "claude|lean": 1,
+  "claude|tla": 3,
+  "fable|sam": 1,
+  "fable|lean": 1,
+  "fable|tla": 1,
+  "sonnet|sam": 2,
+  "sonnet|lean": 2,
+  "sonnet|tla": 5,
+  "haiku|sam": 1,
+  "haiku|lean": 5,
+  "haiku|tla": 2,
+  "leanstral|sam": 4,
+  "leanstral|lean": 4,
+  "leanstral|tla": 3,
+  "mistral-large|sam": 3,
+  "mistral-large|lean": 1,
+  "mistral-large|tla": 3,
+  "devstral|sam": 3,
+  "devstral|lean": 2,
+  "devstral|tla": 3
+ }
+}

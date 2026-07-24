@@ -56,6 +56,7 @@ def download_file(url: str, output_path: Path) -> bool:
         output_path.parent.mkdir(parents=True, exist_ok=True)
 
         with tempfile.NamedTemporaryFile(delete=False) as temp_file:
+            temp_name = temp_file.name
             with urllib.request.urlopen(url) as response:
                 file_size = int(response.headers.get('Content-Length', 0))
                 downloaded = 0
@@ -70,10 +71,21 @@ def download_file(url: str, output_path: Path) -> bool:
                         progress = (downloaded / file_size) * 100
                         print(f"\rProgress: {progress:.1f}%", end='', flush=True)
                 print()
+            temp_file.flush()
 
-            shutil.move(temp_file.name, str(output_path))
-            print_success(f"{output_path.name} downloaded successfully")
-            return True
+        # The temp file is now closed and flushed. Moving it while still open
+        # (inside the `with`) truncates it on Windows — the OS buffer isn't
+        # written yet — producing a broken jar. Guard against short downloads too.
+        if file_size > 0 and downloaded != file_size:
+            Path(temp_name).unlink(missing_ok=True)
+            print_error(
+                f"{output_path.name} truncated: got {downloaded} of {file_size} bytes"
+            )
+            return False
+
+        shutil.move(temp_name, str(output_path))
+        print_success(f"{output_path.name} downloaded successfully")
+        return True
 
     except Exception as e:
         print_error(f"Failed to download {output_path.name}: {e}")

@@ -1,0 +1,67 @@
+Convert the following production TypeScript source — the payment workflow of a
+real point-of-sale system driving a PAX A920 payment terminal through the Finix
+payments API — into a plain JavaScript transition function — NO libraries, NO
+frameworks, NO SAM pattern. Just a pure function over the observable state.
+This is compared directly against a TLA+ relation of the same workflow, so it
+is constrained to the same observable state.
+
+## Source (the real implementation)
+
+Source from {file_path}:
+```typescript
+{source_code}
+```
+
+## Observable state (EXACTLY these seven keys)
+
+The state is a plain object with EXACTLY these keys:
+
+  - `txState`             — one of 'IDLE' | 'INITIATING' | 'AWAITING_TAP' |
+                            'AWAITING_VERIFICATION' | 'RECORDING' | 'COMPLETED' |
+                            'DECLINED' | 'CANCELLING' | 'CANCELLED'
+  - `orderId`             — string or null
+  - `amountCents`         — number or null
+  - `transferId`          — string or null
+  - `declineCode`         — string or null
+  - `approvedAmountCents` — number or null
+  - `paymentId`           — string or null
+
+Do NOT add any other keys (no card fields, no timestamps, no split metadata,
+no idempotency key, no messages).
+
+## Module contract (hard requirements)
+
+Your specification is a CommonJS module evaluated by an automated harness. It
+MUST export exactly:
+
+    module.exports = { init, next };
+
+  - `init()` returns the initial state: `{ txState: 'IDLE', orderId: null,
+    amountCents: null, transferId: null, declineCode: null,
+    approvedAmountCents: null, paymentId: null }`.
+  - `next(state, action, data)` is a PURE function returning the NEW state
+    (same seven keys) after applying ONE action:
+      * `state`  — the current state object.
+      * `action` — one of the strings:
+          'INITIATE_PAYMENT'      data: { orderId: string, amountCents: number }
+          'TRANSFER_CREATED'      data: { transferId: string }
+          'VERIFICATION_STARTED'  data: { }
+          'TAP_APPROVED'          data: { approvedAmount: number }
+          'TAP_DECLINED'          data: { declineCode: string|null }
+          'PAYMENT_RECORDED'      data: { paymentId: string|null }
+          'CANCEL_PAYMENT'        data: { }
+          'CANCEL_CONFIRMED'      data: { }
+          'EXIT_FLOW'             data: { }
+    Do NOT mutate `state`; return a new object. No I/O, timers, randomness, or
+    external state. No SAM library, no classes required — a single function.
+
+The harness replays real POS execution traces: it pins a captured pre-state,
+calls `next(pre, action, data)` exactly once, and compares the returned state
+to the captured post-state. Model the observable single-step behavior of the
+real workflow as implemented in the source above — including what happens when
+an action arrives in a state where the workflow does not act on it.
+
+## Output
+
+Output EXACTLY ONE fenced ```javascript code block containing the module, and
+nothing else (no prose).

@@ -8,7 +8,9 @@ models:
     model_name: "gpt-4o"
     api_key_env: "OPENAI_API_KEY"
     temperature: 0.7
-    max_tokens: 200000
+    # gpt-4o output cap is 16384; OpenAI 400s above it, so 64000 (the house
+    # default) would also be rejected here. Per OpenAI model docs, 2026-06.
+    max_tokens: 16384
     timeout: 1800
 
   gpt5:
@@ -16,17 +18,84 @@ models:
     model_name: "gpt-5"
     api_key_env: "OPENAI_API_KEY"  # or set api_key directly
     temperature: 1
-    max_tokens: 200000
+    # gpt-5 output cap is 128000 (LiteLLM maps max_tokens -> max_completion_tokens);
+    # 64000 matches the house default and the gpt-5.x sibling entries.
+    max_tokens: 64000
     timeout: 1800  # 30 minutes timeout for large TLA+ generation
     
   # Anthropic Claude
   claude:
     provider: "anthropic"
-    model_name: "claude-sonnet-4-20250514"
+    # Sonnet 4 (claude-sonnet-4-20250514) retired 2026-06-15; switched to the
+    # current Opus tier on 2026-06-30. Opus 4.8 removes the sampling params:
+    # temperature/top_p/top_k now return a 400, so they are intentionally absent.
+    model_name: "claude-opus-4-8"
+    api_key_env: "ANTHROPIC_API_KEY"
+    # Opus 4.8 supports up to 128000 output tokens; kept at 64000 to match the
+    # prior run's cap and stay within non-streaming timeout limits.
+    max_tokens: 64000
+
+  # Sibling Claude tiers for cross-model comparison (same ANTHROPIC_API_KEY).
+  # Sonnet 4.6 rejects temperature AND top_p together, so set only temperature;
+  # both tiers still accept sampling params (unlike Opus 4.7+), so they are kept.
+  sonnet:
+    provider: "anthropic"
+    model_name: "claude-sonnet-4-6"
     api_key_env: "ANTHROPIC_API_KEY"
     temperature: 0.1
-    max_tokens: 200000
-    top_p: 0.9
+    max_tokens: 64000
+
+  haiku:
+    provider: "anthropic"
+    model_name: "claude-haiku-4-5"
+    api_key_env: "ANTHROPIC_API_KEY"
+    temperature: 0.1
+    max_tokens: 64000
+
+  # Claude Fable 5 — Anthropic's most capable model. Sampling params
+  # (temperature/top_p/top_k) are removed (dropped by the adapter's
+  # _should_omit_sampling_params) and thinking is always on (no thinking config
+  # is sent). 128K max output; kept at 64000 for non-streaming. Fable reasons
+  # heavily per request, so allow a long timeout.
+  fable:
+    provider: "anthropic"
+    model_name: "claude-fable-5"
+    api_key_env: "ANTHROPIC_API_KEY"
+    max_tokens: 64000
+    timeout: 1800
+
+  # Claude Opus 5 — released 2026-07. Like Fable 5 / Opus 4.7+, the sampling
+  # params (temperature/top_p/top_k) are rejected, so none are set here and the
+  # adapter's _should_omit_sampling_params drops any that leak in from defaults.
+  # 128K max output; kept at 64000 to match the house default and stay inside
+  # the non-streaming timeout. Reasons heavily, so allow a long timeout.
+  opus5:
+    provider: "anthropic"
+    model_name: "claude-opus-5"
+    api_key_env: "ANTHROPIC_API_KEY"
+    max_tokens: 64000
+    timeout: 1800
+
+  mistral-large:
+    provider: "mistral"
+    model_name: "mistral-large-2512"
+    api_key_env: "MISTRAL_API_KEY"
+    max_tokens: 64000
+    timeout: 1800
+
+  devstral:
+    provider: "mistral"
+    model_name: "devstral-2512"
+    api_key_env: "MISTRAL_API_KEY"
+    max_tokens: 64000
+    timeout: 1800
+
+  leanstral:
+    provider: "mistral"
+    model_name: "labs-leanstral-1-5-1"  # announced as "Leanstral 1.5"; API id probed 2026-07-05
+    api_key_env: "MISTRAL_API_KEY"
+    max_tokens: 64000
+    timeout: 1800  # prover-style model; may reason long before emitting the spec
 
   deepseek_tencent:
     provider: "deepseek"
@@ -40,23 +109,14 @@ models:
     max_tokens: 32000
     timeout: 2700
 
-  deepseek:
-    provider: "deepseek"
-    url: "https://api.deepseek.com"
-    model_name: "deepseek-reasoner"
-    api_key_env: "DEEPSEEK_API_KEY"
-    temperature: 0.1
-    max_tokens: 200000
-    top_p: 0.9
-
-
   my_yunwu:
     provider: "yunwu"
     url: "https://yunwu.ai/v1"
     model_name: "gpt-5-2025-08-07"
     api_key_env: "YUNWU_API_KEY"
     temperature: 0.1
-    max_tokens: 200000
+    # gpt-5 (yunwu proxy) output cap is 128000; 64000 matches the house default.
+    max_tokens: 64000
     top_p: 0.9
 
   gemini:
@@ -64,7 +124,10 @@ models:
     model_name: "gemini-2.5-pro"
     api_key_env: "GEMINI_API_KEY"
     temperature: 0.1
-    max_tokens: 200000
+    # gemini-2.5-pro hard output cap is 65536 (API 400s at >=65537). max_tokens
+    # is a combined thinking+output budget; 64000 stays under the ceiling and
+    # aligns with the house default.
+    max_tokens: 64000
     top_p: 0.9
     thinking_budget: 32768
 
@@ -80,7 +143,8 @@ models:
     base_url: "https://api.gptsapi.net/v1"
     api_key_env: "GPTSAPI_KEY"
     temperature: 0.1
-    max_tokens: 200000
+    # claude-sonnet-4-6 output cap is 64000.
+    max_tokens: 64000
     top_p: 0.9
 
   # Direct Anthropic API for sonnet. Added 2026-04-18 after gptsapi proxy
@@ -104,7 +168,10 @@ models:
     base_url: "https://api.gptsapi.net/v1"
     api_key_env: "GPTSAPI_KEY"
     temperature: 0.1
-    max_tokens: 200000
+    # deepseek-reasoner output cap is 64000 (covers CoT + answer). Note: the
+    # native deepseek-reasoner name retires 2026-07-24 (aliases to
+    # deepseek-v4-flash); this proxy path may outlive it via gptsapi's mapping.
+    max_tokens: 64000
     top_p: 0.9
 
   gpt54_proxy:
@@ -113,7 +180,8 @@ models:
     base_url: "https://api.gptsapi.net/v1"
     api_key_env: "GPTSAPI_KEY"
     temperature: 0.1
-    max_tokens: 200000
+    # gpt-5.4 output cap is 128000; 64000 matches gpt54_azure and the house default.
+    max_tokens: 64000
     top_p: 0.9
 
   # GPT-5.2 via gptsapi. Added 2026-04-18 as a sibling comparison point to
@@ -381,7 +449,8 @@ models:
     base_url: "https://api.gptsapi.net/v1"
     api_key_env: "GPTSAPI_KEY"
     temperature: 0.1
-    max_tokens: 200000
+    # gemini-3.1-pro-preview output cap is 65536; 64000 matches gemini31_google.
+    max_tokens: 64000
     top_p: 0.9
 
   # xAI direct API, OpenAI-compatible at /v1/chat/completions.

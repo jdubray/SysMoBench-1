@@ -1,0 +1,19 @@
+BUG 4 - AWAITING_VERIFICATION with no breadcrumb = permanently stuck
+Config: bug4_dbfail.cfg (DB_CAN_FAIL=TRUE).
+TLC: Invariant Inv_VerificationHasBreadcrumb violated, 6-state trace (raw: bug4_dbfail.raw.txt).
+
+ 1-3. INITIATE -> createSale attempt 1 in flight
+ 4. attempt-1 response lost     retry (same key), attempt 2
+ 5. attempt-2 response lost     -> last-gasp cancel probe finds nothing
+ 6. Case 4 fallback             pending_terminal_sales INSERT FAILS (:612-617
+                                catch logs and continues), VERIFICATION_STARTED
+                                is dispatched anyway (:624) -> AWAITING_VERIFICATION
+                                with breadcrumb=FALSE.
+
+The FSM state AWAITING_VERIFICATION has only TAP_APPROVED/TAP_DECLINED exits
+(:236), both of which only the orphan sweep dispatches - and the sweep scans
+pending_terminal_sales rows (reconcile.ts:1093+), which do not exist. No timeout,
+no cancel, no EXIT_FLOW is allowed from this state: the terminal is wedged until
+the 24 h TTL sweep (:1838) silently drops the handle, and /terminal-sale keeps
+returning 409 for the order. Narrow trigger (local SQLite write failing), but the
+dispatch-after-DB-failure design makes the stuck state reachable by construction.

@@ -1,0 +1,117 @@
+--- C:/Users/jjdub/code/baanbaan/Merchant/v2/src/workflows/terminal-payment.ts	2026-06-11 22:25:15.549145100 -0700
++++ C:/Users/jjdub/code/baanbaan/Merchant/v2/src/workflows/terminal-payment-traced.ts	2026-07-03 10:48:53.816580500 -0700
+@@ -200,8 +200,53 @@
+ // Constants
+ // ---------------------------------------------------------------------------
+ 
+-const POLL_INTERVAL_MS = 2_000    // 2 s between Finix API polls
+-const TIMEOUT_MS       = 180_000  // 3 min before auto-cancel
++const POLL_INTERVAL_MS = Number(process.env.FINIXPOS_POLL_MS    ?? 2_000)    // 2 s between Finix API polls
++const TIMEOUT_MS       = Number(process.env.FINIXPOS_TIMEOUT_MS ?? 180_000)  // 3 min before auto-cancel
++
++// ---------------------------------------------------------------------------
++// [finixpos-trace] instrumentation — the ONLY additions in this traced copy.
++// Captures one NDJSON window {pre, action, data, post} per SAM dispatch,
++// including FSM-rejected (observable no-op) dispatches: sam-pattern runs
++// acceptors AND reactors on every presented proposal, so a prepended acceptor
++// snapshots pre+action and an appended reactor emits post.
++// ---------------------------------------------------------------------------
++import { appendFileSync } from 'node:fs'
++
++interface TraceWindow {
++  pre:    Record<string, unknown>
++  action: string
++  data:   Record<string, unknown>
++  post?:  Record<string, unknown>
++}
++
++/** Pinned observable-state projection (docs/finixpos_study_plan.md §1) */
++function _traceProject(m: TerminalPaymentModel): Record<string, unknown> {
++  return {
++    txState:             m.txState,
++    orderId:             m.orderId             ?? null,
++    amountCents:         m.amountCents         ?? null,
++    transferId:          m.transferId          ?? null,
++    declineCode:         m.declineCode         ?? null,
++    approvedAmountCents: m.approvedAmountCents ?? null,
++    paymentId:           m.paymentId           ?? null,
++  }
++}
++
++const _TRACE_DATA_KEYS = ['orderId', 'amountCents', 'transferId', 'approvedAmount', 'declineCode', 'paymentId'] as const
++
++function _traceProjectData(proposal: Record<string, unknown>): Record<string, unknown> {
++  const out: Record<string, unknown> = {}
++  for (const k of _TRACE_DATA_KEYS) {
++    if (proposal[k] !== undefined) out[k] = proposal[k]
++  }
++  return out
++}
++
++function _traceEmit(w: TraceWindow): void {
++  const file = process.env.FINIXPOS_TRACE_FILE
++  if (!file) return
++  try { appendFileSync(file, JSON.stringify(w) + '\n') } catch { /* tracing must never break the workflow */ }
++}
+ 
+ // ---------------------------------------------------------------------------
+ // FSM definition
+@@ -314,6 +359,9 @@
+   // Reset to false on EXIT_FLOW (when the workflow returns to IDLE).
+   let _timedOut           = false
+ 
++  // [finixpos-trace] window under construction for the current dispatch
++  let _pendingTrace: TraceWindow | null = null
++
+   // ── Snapshot of the last rendered model (sam-pattern has no getState()) ───
+   let _lastModel: TerminalPaymentModel = {
+     terminalId, merchantId, finixDeviceId,
+@@ -844,6 +892,19 @@
+       actions: componentActions,
+ 
+       acceptors: [
++        // [finixpos-trace] capture (pre, action, data) BEFORE the pre-FSM
++        // rewrites, so the window's action is the dispatched name
++        // (e.g. TAP_DECLINED even when rewritten to CANCEL_DECLINED).
++        (model: TerminalPaymentModel) => (proposal: Record<string, unknown>) => {
++          const action = proposal.__actionName as string | undefined
++          if (!action) return  // internal __error presentations are not steps
++          _pendingTrace = {
++            pre:    _traceProject(model),
++            action,
++            data:   _traceProjectData(proposal),
++          }
++        },
++
+         // ── Pre-FSM rewrites ───────────────────────────────────────────────
+         // 1. CANCELLING + TAP_DECLINED → rewrite to CANCEL_DECLINED (→ CANCELLED)
+         //    Without this, TAP_DECLINED always goes to DECLINED regardless of source state.
+@@ -970,6 +1031,16 @@
+             declineCode:  model.declineCode,
+           })
+         },
++
++        // [finixpos-trace] emit the window AFTER the full acceptor chain has
++        // run (post state), including observable no-op steps (post == pre).
++        (model: TerminalPaymentModel) => () => {
++          if (_pendingTrace) {
++            _pendingTrace.post = _traceProject(model)
++            _traceEmit(_pendingTrace)
++            _pendingTrace = null
++          }
++        },
+       ],
+ 
+       naps: [
+@@ -1408,6 +1479,11 @@
+     },
+   }
+ 
++  // [finixpos-trace] harness-only raw dispatch for glitch-window injection
++  // (e.g. TAP_APPROVED while COMPLETED). Not part of the public API.
++  ;(handle as unknown as Record<string, unknown>).__dispatch =
++    (name: string, data?: Record<string, unknown>) => intentMap.get(name)?.(data ?? {})
++
+   return handle
+ }
+ 

@@ -1,0 +1,93 @@
+Generate a TLA+ specification of the payment workflow below — the production
+TypeScript source of a real point-of-sale system driving a PAX A920 payment
+terminal through the Finix payments API — for automated validation against
+real POS execution traces. This spec is compared directly against a JavaScript
+spec of the same workflow, so it is constrained to the same observable-state
+contract: express the workflow over the identical variables the trace uses, so
+trace states map onto spec states with no interpretation.
+
+## Source (the real implementation)
+
+```typescript
+{source_code}
+```
+
+## Observable-state contract (MANDATORY — the harness pins these exactly)
+
+Your module MUST be named `finixpos` and its observable state MUST be EXACTLY
+these seven variables — declare no others:
+
+    VARIABLES txState, orderId, amountCents, transferId, declineCode,
+              approvedAmountCents, paymentId
+
+  - txState             ∈ TxStates (see below)
+  - orderId             ∈ OrderIds ∪ {NONE}
+  - amountCents         ∈ Amounts ∪ {NOAMT}
+  - transferId          ∈ TransferIds ∪ {NONE}
+  - declineCode         ∈ DeclineCodes ∪ {NONE}
+  - approvedAmountCents ∈ Amounts ∪ {NOAMT}
+  - paymentId           ∈ PaymentIds ∪ {NONE}
+
+Sentinels are plain values — DO NOT define any value with CHOOSE (an unbounded
+CHOOSE cannot be evaluated by TLC and the spec will fail model checking):
+
+    NONE  == "none"
+    NOAMT == -1
+
+Fixed state set (strings, exactly these):
+
+    TxStates == { "IDLE", "INITIATING", "AWAITING_TAP", "AWAITING_VERIFICATION",
+                  "RECORDING", "COMPLETED", "DECLINED", "CANCELLING", "CANCELLED" }
+
+Declare as CONSTANTS the finite value sets: OrderIds, Amounts, TransferIds,
+DeclineCodes, PaymentIds. The harness binds them to small finite sets that
+include every value appearing in the traces.
+
+Do NOT introduce any other VARIABLES (no pc, no message channels, no history).
+Model the workflow purely over the seven variables.
+
+## Action operators (MANDATORY signatures — top-level named operators)
+
+    InitiatePayment(order, amount)   \* order ∈ OrderIds, amount ∈ Amounts
+    TransferCreated(transfer)        \* transfer ∈ TransferIds
+    VerificationStarted              \* no arguments
+    TapApproved(approvedAmount)      \* approvedAmount ∈ Amounts
+    TapDeclined(code)                \* code ∈ DeclineCodes ∪ {NONE}
+    PaymentRecorded(payment)         \* payment ∈ PaymentIds ∪ {NONE}
+    CancelPayment                    \* no arguments
+    CancelConfirmed                  \* no arguments
+    ExitFlow                         \* no arguments
+
+Each is a TLA+ action relating the unprimed variables to their primed values.
+These names and arities are the contract with the trace harness — do not
+rename, merge, or split them.
+
+For each observed trace transition the harness pins the pre-state, applies ONE
+action with the trace's data, and checks the resulting state equals the trace
+post-state. Model the workflow's observable behavior in a single step as
+implemented in the source above — including what happens when an action
+arrives in a state where the workflow does not act on it.
+
+## Required structure
+
+  - EXTENDS Integers (add only standard modules you actually use).
+  - Init == the workflow's initial state (txState = "IDLE", all transaction
+    fields at their sentinel).
+  - TypeOK == type invariant over the seven variables.
+  - vars == <<txState, orderId, amountCents, transferId, declineCode,
+              approvedAmountCents, paymentId>>
+  - Next == existential quantification over the constant sets covering all
+    nine actions.
+  - Spec == Init /\ [][Next]_vars
+
+## Output
+
+Output EXACTLY TWO fenced code blocks and NOTHING else (no prose):
+
+1. a ```tla block: the full module, from `---- MODULE finixpos ----` to `====`.
+2. a ```cfg block: `SPECIFICATION Spec` and a `CONSTANTS` section binding
+   OrderIds = {"O1"}, Amounts = {500, 1000, 1500}, TransferIds = {"TR1", "TR2"},
+   DeclineCodes = {"INSUFFICIENT_FUNDS", "CANCELLATION_VIA_API",
+   "CANCELLATION_VIA_DEVICE", "IMMEDIATE_FAILURE", "PARTIAL_PAYMENT",
+   "VERIFICATION_FAILED"}, PaymentIds = {"P1"}. Do NOT add INVARIANT or
+   PROPERTY lines.

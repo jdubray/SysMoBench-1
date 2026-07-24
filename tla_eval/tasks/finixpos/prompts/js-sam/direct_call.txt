@@ -1,0 +1,153 @@
+You are an expert in the SAM pattern (State-Action-Model, https://sam.js.org) — a JavaScript software engineering pattern grounded in TLA+ semantics: actions compute proposals, the model accepts or rejects them in a synchronized step, and state is a pure function of the model.
+
+Convert the following production TypeScript source — the payment workflow of a real point-of-sale system driving a PAX A920 payment terminal through the Finix payments API — into an executable JavaScript SAM specification using the @cognitive-fab/sam-pattern library.
+
+System: POS ↔ PAX A920 terminal ↔ Finix backend payment state alignment
+
+Source Code from {file_path}:
+```typescript
+{source_code}
+```
+
+## Observable state (the harness pins EXACTLY these keys)
+
+Phase-3 validation pins the pre-state via setState, applies ONE action with the
+trace's data, and checks that getState() equals the trace post-state over
+EXACTLY these keys — your getState() snapshot must contain exactly these seven
+keys and no others:
+
+```javascript
+{
+  txState: 'IDLE',            // 'IDLE' | 'INITIATING' | 'AWAITING_TAP' | 'AWAITING_VERIFICATION'
+                              // | 'RECORDING' | 'COMPLETED' | 'DECLINED' | 'CANCELLING' | 'CANCELLED'
+  orderId: null,              // string | null
+  amountCents: null,          // number | null
+  transferId: null,           // string | null
+  declineCode: null,          // string | null
+  approvedAmountCents: null,  // number | null
+  paymentId: null,            // string | null
+}
+```
+
+Do NOT model card fields, timestamps, split metadata, idempotency keys, or
+messages. Model the observable single-step behavior of the real workflow as
+implemented in the source above — including what happens when an action
+arrives in a state where the workflow does not act on it.
+
+## Mandatory module contract (hard requirements)
+
+Your specification is a CommonJS module evaluated by an automated harness. It MUST export exactly this shape:
+
+module.exports = { instance, init, actions, getState, setState, checkerIntents };
+
+- `instance` — the SAM instance, created with:
+  `const instance = createInstance({ instanceName: 'finixpos', hasAsyncActions: false });`
+  (`hasAsyncActions: false` is REQUIRED — all steps must be synchronous)
+- `init()` — resets the model to its initial state (and clears any error):
+  call `instance({}).state().clearError()` then `setState(INITIAL_STATE)`
+- `actions` — an object with EXACTLY these mandatory action names and data shapes (hard contract used by trace validation):
+  - `actions.INITIATE_PAYMENT(data)`     data: `{ orderId: string, amountCents: number }`
+  - `actions.TRANSFER_CREATED(data)`     data: `{ transferId: string }`
+  - `actions.VERIFICATION_STARTED(data)` data: `{ }`
+  - `actions.TAP_APPROVED(data)`         data: `{ approvedAmount: number }`
+  - `actions.TAP_DECLINED(data)`         data: `{ declineCode: string|null }`
+  - `actions.PAYMENT_RECORDED(data)`     data: `{ paymentId: string|null }`
+  - `actions.CANCEL_PAYMENT(data)`       data: `{ }`
+  - `actions.CANCEL_CONFIRMED(data)`     data: `{ }`
+  - `actions.EXIT_FLOW(data)`            data: `{ }`
+  Each is a function that fires the corresponding SAM intent synchronously.
+- `getState()` — returns a plain JSON-serializable snapshot of the model with exactly the seven observable keys (no functions, no SAM internals). Use a JSON.stringify replacer that drops keys starting with '__' and function values.
+- `setState(snapshot)` — forces the model to a given snapshot via `instance({ initialState: deepClone(snapshot) })`
+- `checkerIntents` — descriptors for the bundled behavior explorer: an array of `{ name, intent, values }` where `name` is the action name, `intent` is the function from `actions`, and `values` is a non-empty array of argument arrays covering the action's input domain (use small representative values, e.g. orderId 'O1', amounts 500/1000/1500, transferId 'TR1', declineCodes 'INSUFFICIENT_FUNDS' / 'CANCELLATION_VIA_API' / 'CANCELLATION_VIA_DEVICE' / 'IMMEDIATE_FAILURE', paymentId 'P1').
+
+DETERMINISM RULES (violations are detected and fail the evaluation):
+- No I/O, no timers, no Date/clock access, no Math.random, no async actions
+- Acceptors must guard against invalid proposals (an action that the workflow does not act on in the current state must be a no-op, NOT a throw)
+- Do NOT include component `safety` conditions or a `render` function — invariants are verified in a separate phase
+
+## In-context example: Rocket Launcher (the SAM community's canonical small system)
+
+```javascript
+'use strict';
+
+const { createInstance } = require('@cognitive-fab/sam-pattern');
+
+const instance = createInstance({ instanceName: 'rocket', hasAsyncActions: false });
+
+// status: 'ready' | 'counting' | 'aborted' | 'launched'
+const INITIAL_STATE = { counter: 10, status: 'ready' };
+
+const clone = (value) => JSON.parse(JSON.stringify(value));
+
+const { intents } = instance({
+  initialState: clone(INITIAL_STATE),
+  component: {
+    actions: [
+      () => ({ __name: 'Start', start: true }),
+      () => ({ __name: 'Decrement', decrement: true }),
+      () => ({ __name: 'Abort', abort: true }),
+    ],
+    acceptors: [
+      (model) => ({ start }) => {
+        if (start && model.status === 'ready') model.status = 'counting';
+      },
+      (model) => ({ decrement }) => {
+        if (decrement && model.status === 'counting' && model.counter > 0) model.counter -= 1;
+      },
+      (model) => ({ abort }) => {
+        if (abort && model.status === 'counting') model.status = 'aborted';
+      },
+    ],
+    reactors: [
+      (model) => () => {
+        if (model.status === 'counting' && model.counter === 0) model.status = 'launched';
+      },
+    ],
+  },
+});
+
+const [startIntent, decrementIntent, abortIntent] = intents;
+
+const sanitizeReplacer = (key, value) => {
+  if (typeof key === 'string' && key.startsWith('__')) return undefined;
+  if (typeof value === 'function') return undefined;
+  return value;
+};
+
+const getState = () => JSON.parse(JSON.stringify(instance({}).state(), sanitizeReplacer));
+
+const setState = (snapshot) => { instance({ initialState: clone(snapshot) }); };
+
+const init = () => {
+  instance({}).state().clearError();
+  setState(INITIAL_STATE);
+};
+
+const actions = {
+  Start: (data = {}) => startIntent(data),
+  Decrement: (data = {}) => decrementIntent(data),
+  Abort: (data = {}) => abortIntent(data),
+};
+
+const checkerIntents = [
+  { name: 'Start', intent: actions.Start, values: [[{}]] },
+  { name: 'Decrement', intent: actions.Decrement, values: [[{}]] },
+  { name: 'Abort', intent: actions.Abort, values: [[{}]] },
+];
+
+module.exports = { instance, init, actions, getState, setState, checkerIntents };
+```
+
+EXPLICITLY EXCLUDED (do not model):
+- Database writes, SSE broadcasts, logging, order locks, reconciliation sweeps
+- The Finix HTTP adapter, polling timers, retries, idempotency keys
+- Split payments, tips bookkeeping, card detail fields, rehydration
+- The module registry and the higher-level entry-point functions
+
+CRITICAL OUTPUT REQUIREMENTS:
+1. Output EXACTLY ONE fenced code block: ```javascript ... ```. Nothing outside the fence.
+2. The block must be a complete, self-contained CommonJS module following the contract above.
+3. Set `__name` on every proposal (the action name) so explorer behaviors are readable.
+4. Do not include safety conditions, render functions, assertions, or console output.
+
+Generate the complete JS-SAM specification that accurately models the payment workflow's observable behavior.

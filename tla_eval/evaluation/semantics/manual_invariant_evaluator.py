@@ -39,18 +39,6 @@ class InvariantTemplate:
     tla_example: str
 
 
-@dataclass  
-class InvariantTestResult:
-    """Result of testing a single invariant"""
-    name: str
-    success: bool
-    translated_invariant: str
-    error_message: Optional[str] = None
-    states_explored: int = 0
-    verification_time: float = 0.0
-    tlc_output: str = ""
-
-
 class InvariantTemplateLoader:
     """Loads invariant templates from YAML files"""
     
@@ -326,87 +314,39 @@ class AgentInvariantTranslator:
         Returns:
             Tuple of (success, {invariant_name: translated_invariant}, error_message)
         """
-        import asyncio
-        import json
-        import tempfile
-        import shutil
+        from .agent_translation import run_agent_translation
 
-        try:
-            # Create temporary workspace
-            workspace_dir = Path(tempfile.mkdtemp(prefix="inv_translator_"))
-            logger.info(f"Created agent workspace at: {workspace_dir}")
+        templates_data = [
+            {
+                "name": t.name,
+                "type": t.type,
+                "natural_language": t.natural_language,
+                "formal_description": t.formal_description,
+                "tla_example": t.tla_example,
+            }
+            for t in templates
+        ]
+        templates_yaml = yaml.dump(
+            templates_data, default_flow_style=False, allow_unicode=True
+        )
 
-            try:
-                agent_cli = self._select_agent_cli(model_name)
-                instruction_filename = "CODEX.md" if agent_cli == "codex" else "CLAUDE.md"
+        success, output_content, error = run_agent_translation(
+            instructions=self._build_claude_md(templates),
+            extra_files={
+                "specification.tla": tla_content,
+                "templates.yaml": templates_yaml,
+            },
+            model_name=model_name,
+            timeout=self.timeout,
+        )
+        if not success:
+            return False, {}, error
 
-                # Write specification file
-                spec_file = workspace_dir / "specification.tla"
-                spec_file.write_text(tla_content, encoding="utf-8")
-
-                # Write templates as YAML
-                templates_data = []
-                for t in templates:
-                    templates_data.append({
-                        "name": t.name,
-                        "type": t.type,
-                        "natural_language": t.natural_language,
-                        "formal_description": t.formal_description,
-                        "tla_example": t.tla_example
-                    })
-
-                templates_file = workspace_dir / "templates.yaml"
-                with open(templates_file, 'w', encoding='utf-8') as f:
-                    yaml.dump(templates_data, f, default_flow_style=False, allow_unicode=True)
-
-                # Create output directory
-                output_dir = workspace_dir / "output"
-                output_dir.mkdir(exist_ok=True)
-
-                # Write agent instructions
-                claude_md = self._build_claude_md(templates)
-                (workspace_dir / instruction_filename).write_text(claude_md, encoding="utf-8")
-
-                # Execute agent CLI
-                start_time = time.time()
-                result = asyncio.run(
-                    self._execute_agent_cli(workspace_dir, model_name, agent_cli)
-                )
-                duration = time.time() - start_time
-
-                if not result["success"]:
-                    return False, {}, result.get("error", "Agent execution failed")
-
-                logger.info(f"{agent_cli} agent completed in {duration:.2f}s")
-
-                # Read output
-                output_file = output_dir / "invariants.json"
-                if not output_file.exists():
-                    return False, {}, "Agent did not produce output file: output/invariants.json"
-
-                output_content = output_file.read_text(encoding="utf-8")
-
-                # Parse JSON output
-                translated_invariants = self._parse_agent_output(output_content, templates)
-
-                logger.info(f"Successfully translated {len(translated_invariants)} invariants via agent")
-                return True, translated_invariants, None
-
-            finally:
-                # Cleanup workspace
-                shutil.rmtree(workspace_dir, ignore_errors=True)
-
-        except Exception as e:
-            logger.error(f"Agent invariant translation failed: {e}")
-            return False, {}, str(e)
-
-    def _select_agent_cli(self, model_name: str) -> str:
-        """Select agent CLI from model name. Claude Code aliases route to claude; others use codex."""
-        normalized = (model_name or "").strip().lower()
-        claude_aliases = {"default", "sonnet", "haiku", "opus"}
-        if not normalized or normalized in claude_aliases or normalized.startswith("claude"):
-            return "claude"
-        return "codex"
+        translated_invariants = self._parse_agent_output(output_content, templates)
+        logger.info(
+            "Successfully translated %d invariants via agent", len(translated_invariants)
+        )
+        return True, translated_invariants, None
 
     def _build_claude_md(self, templates: List[InvariantTemplate]) -> str:
         """Build CLAUDE.md instructions for the agent."""
@@ -483,91 +423,6 @@ Write a JSON file to `./output/invariants.json` with this exact format:
 3. Use only variables and constants that exist in the specification
 4. Output MUST be valid JSON
 '''
-
-    async def _execute_agent_cli(self, workspace_path: Path, model_name: str, agent_cli: str) -> dict:
-        """Execute Claude Code or Codex in the workspace."""
-        import asyncio
-
-        if agent_cli == "codex":
-            model = model_name if model_name and model_name not in {"default", "codex"} else ""
-            cmd = [
-                "codex",
-                "exec",
-                "--dangerously-bypass-approvals-and-sandbox",
-                "--skip-git-repo-check",
-                "-c", 'model_reasoning_effort="high"',
-            ]
-            if model:
-                cmd.extend(["-m", model])
-            cmd.append("Read CODEX.md and complete the invariant translation task.")
-        else:
-            # The `claude` CLI accepts model codes (sonnet/opus/haiku) or
-            # full model IDs (claude-*) — not SysMoBench aliases like
-            # "claude_opus_proxy", which would yield "400 Unknown Model".
-            # Refuse anything else so callers don't silently run against a
-            # different model than they configured.
-            cli_model_codes = {"sonnet", "opus", "haiku"}
-            if model_name in cli_model_codes or (
-                model_name and model_name.startswith("claude-")
-            ):
-                model = model_name
-            else:
-                return {
-                    "success": False,
-                    "error": (
-                        f"Agent translator (claude CLI) needs a "
-                        f"sonnet/opus/haiku code or a claude-* model ID; "
-                        f"got {model_name!r}. Pass a valid code at the call "
-                        f"site instead of relying on a fallback."
-                    ),
-                }
-            cmd = [
-                "claude",
-                "--print",
-                "--dangerously-skip-permissions",
-                "--model", model,
-                "--output-format", "json",
-                "Read CLAUDE.md and complete the invariant translation task.",
-            ]
-
-        try:
-            process = await asyncio.create_subprocess_exec(
-                *cmd,
-                cwd=workspace_path,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
-            )
-
-            try:
-                stdout, stderr = await asyncio.wait_for(
-                    process.communicate(),
-                    timeout=self.timeout,
-                )
-            except asyncio.TimeoutError:
-                process.kill()
-                await process.wait()
-                return {"success": False, "error": f"Timeout after {self.timeout} seconds"}
-
-            out = stdout.decode("utf-8", errors="replace")
-            err = stderr.decode("utf-8", errors="replace")
-
-            return {
-                "success": process.returncode == 0,
-                "stdout": out,
-                "stderr": err,
-                "exit_code": process.returncode,
-                # `claude --output-format json` writes its error payload to
-                # stdout and leaves stderr empty; fall back to stdout so the
-                # failure reason is not lost.
-                "error": (err or out) if process.returncode != 0 else None,
-            }
-
-        except FileNotFoundError:
-            if agent_cli == "codex":
-                return {"success": False, "error": "Codex CLI not found"}
-            return {"success": False, "error": "Claude Code CLI not found"}
-        except Exception as e:
-            return {"success": False, "error": str(e)}
 
     def _parse_agent_output(self, output_content: str, templates: List[InvariantTemplate]) -> Dict[str, str]:
         """Parse the agent's JSON output."""
@@ -961,6 +816,9 @@ class ManualInvariantEvaluator(BaseEvaluator):
             invariant_results = outcome.cases
             result.model_checking_successful = any(c.success for c in invariant_results)
             result.model_checking_time = sum(c.elapsed_seconds for c in invariant_results)
+            result.states_explored = sum(
+                c.metadata.get("states_explored", 0) for c in invariant_results
+            )
 
             passed_count = sum(1 for c in invariant_results if c.success)
             total_count = len(invariant_results)
@@ -1018,83 +876,6 @@ class ManualInvariantEvaluator(BaseEvaluator):
             result.invariant_generation_error = str(e)
             result.overall_success = False
             return result
-    
-    def _test_single_invariant(self, 
-                              template: InvariantTemplate,
-                              translated_invariant: str, 
-                              tla_content: str,
-                              output_dir: Path,
-                              spec_module: str,
-                              task_name: str,
-                              model_name: str,
-                              base_config: str) -> InvariantTestResult:
-        """Test a single invariant using TLC"""
-        
-        logger.debug(f"Testing invariant: {template.name}")
-        
-        try:
-            # Create directory for this invariant
-            invariant_dir = output_dir / template.name
-            invariant_dir.mkdir(exist_ok=True)
-            
-            # Create modified TLA+ spec with the invariant
-            modified_spec = self._add_invariant_to_spec(
-                tla_content, translated_invariant, template.name
-            )
-            
-            # Save modified spec with correct module name
-            modified_spec_file = invariant_dir / f"{spec_module}.tla"
-            with open(modified_spec_file, 'w', encoding='utf-8') as f:
-                f.write(modified_spec)
-            
-            # Generate config file for this invariant using pre-generated clean base config
-            # This prevents cache pollution from using modified_spec
-            config_success, config_content, config_error = self.static_config_generator.generate_config_for_invariant_from_base(
-                base_config, template.name, template.type
-            )
-            
-            if not config_success:
-                return InvariantTestResult(
-                    name=template.name,
-                    success=False,
-                    translated_invariant=translated_invariant,
-                    error_message=f"Config generation failed: {config_error}"
-                )
-            
-            # Save config file with correct module name
-            config_file = invariant_dir / f"{spec_module}.cfg"
-            with open(config_file, 'w', encoding='utf-8') as f:
-                f.write(config_content)
-            
-            # Run TLC (skip statistics recording for invariant checking, add -deadlock flag)
-            start_time = time.time()
-            tlc_success, tlc_output, tlc_exit_code = self.tlc_runner.run_model_checking(
-                str(modified_spec_file), str(config_file), record_stats=False, use_deadlock_flag=True
-            )
-            verification_time = time.time() - start_time
-            
-            # Parse TLC results
-            violations, deadlock_found, states_explored = self.tlc_runner.parse_tlc_output(tlc_output)
-            
-            success = tlc_success and len(violations) == 0 and not deadlock_found
-            
-            return InvariantTestResult(
-                name=template.name,
-                success=success,
-                translated_invariant=translated_invariant,
-                states_explored=states_explored,
-                verification_time=verification_time,
-                tlc_output=tlc_output,
-                error_message=None if success else f"TLC failed: {len(violations)} violations, deadlock: {deadlock_found}"
-            )
-            
-        except Exception as e:
-            return InvariantTestResult(
-                name=template.name,
-                success=False,
-                translated_invariant=translated_invariant,
-                error_message=f"Testing failed: {str(e)}"
-            )
     
     def _add_invariant_to_spec(self, tla_content: str, invariant_definition: str, invariant_name: str) -> str:
         """Add a single invariant definition to the TLA+ specification"""

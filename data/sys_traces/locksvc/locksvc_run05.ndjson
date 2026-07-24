@@ -1,0 +1,13 @@
+{"state": {"holder": null, "waiters": []}}
+{"action": "ClientLockRequest", "data": {"client": 3}, "state": {"holder": null, "waiters": [3]}}
+{"action": "ClientLockRequest", "data": {"client": 1}, "state": {"holder": null, "waiters": [1, 3]}}
+{"action": "ClientLockRequest", "data": {"client": 2}, "state": {"holder": null, "waiters": [1, 2, 3]}}
+{"action": "ServerGrantLock", "data": {"client": 1}, "state": {"holder": 1, "waiters": [2, 3]}}
+{"action": "ClientCriticalSection", "data": {"client": 1}, "state": {"holder": 1, "waiters": [2, 3]}}
+{"action": "ClientUnlockRequest", "data": {"client": 1}, "state": {"holder": null, "waiters": [2, 3]}}
+{"action": "ServerGrantLock", "data": {"client": 2}, "state": {"holder": 2, "waiters": [3]}}
+{"action": "ClientCriticalSection", "data": {"client": 2}, "state": {"holder": 2, "waiters": [3]}}
+{"action": "ClientUnlockRequest", "data": {"client": 2}, "state": {"holder": null, "waiters": [3]}}
+{"action": "ServerGrantLock", "data": {"client": 3}, "state": {"holder": 3, "waiters": []}}
+{"action": "ClientCriticalSection", "data": {"client": 3}, "state": {"holder": 3, "waiters": []}}
+{"action": "ClientUnlockRequest", "data": {"client": 3}, "state": {"holder": null, "waiters": []}}
